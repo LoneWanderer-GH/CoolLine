@@ -710,7 +710,10 @@ function CoolLine:PET_BAR_UPDATE_COOLDOWN()
             if IS_RETAIL_RELEASE then
                 name, texture = GetPetActionInfo(i)
             else
-                name, _, texture = GetPetActionInfo(i)
+                name, _, texture, _, _, _, spellID = GetPetActionInfo(i)
+                if name and not texture then
+                    _, _, texture = GetSpellInfo(spellID)
+                end
             end
             if name then
                 if start > 0 and not block[name] then
