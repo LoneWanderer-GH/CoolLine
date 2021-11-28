@@ -2,7 +2,7 @@ name: Retail-Classic-Build
 
 on:
   release:
-    types: [published]
+    types: [ published ]
 
 jobs:
 
@@ -12,22 +12,40 @@ jobs:
 
     steps:
 
-    - uses: actions/checkout@v1
+      - uses: actions/checkout@v1
+      - name: Set env
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+#      - name: Test
+#        run: |
+#          echo $RELEASE_VERSION
+#          echo ${{ env.RELEASE_VERSION }}
+      - uses: BigWigsMods/packager@master
+        name: Build Retail and upload to CurseForge
+        with:
+          args: -l -g retail
 
-    - uses: BigWigsMods/packager@master
-      name: Build Retail and upload to CurseForge
-      with:
-        args: -l -g retail
+      - uses: BigWigsMods/packager@master
+        name: Build Classic and upload to CurseForge
+        with:
+          args: -l -g classic
 
-    - uses: BigWigsMods/packager@master
-      name: Build Classic and upload to CurseForge
-      with:
-        args: -l -g classic
-
-    - uses: BigWigsMods/packager@master
-      name: Build Classic and upload to CurseForge
-      with:
-        args: -l -g bcc
+      - uses: BigWigsMods/packager@master
+        name: Build Classic and upload to CurseForge
+        with:
+          args: -l -g bcc
+#      - name: Get latest release data
+#        id: LatestRelease
+#        uses: pozetroninc/github-action-get-latest-release@master
+#        with:
+#          repository: ${{ github.repository }}
+#          excludes: prerelease, draft
+#
+      - name: Post changelog
+        uses: appleboy/discord-action@master
+        with:
+          webhook_id: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_ID }}
+          webhook_token: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_TOKEN }}
+          message: "** New release ${{ env.RELEASE_VERSION }} pushed to CurseForge see https://www.curseforge.com/wow/addons/coolline-classic-updated**"
 
     env:
       CF_API_KEY: ${{ secrets.CF_API_KEY }}

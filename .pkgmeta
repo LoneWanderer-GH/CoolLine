@@ -1,4 +1,10 @@
 package-as: CoolLine
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+ - test_build_all.sh
 
 enable-nolib-creation: no
 

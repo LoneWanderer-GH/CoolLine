@@ -1,14 +1,6 @@
 local ORANGEY, LIGHTRED                       = '|cffFF4500', '|cffff6060'
 local version, build, date, build_toc_version = GetBuildInfo()
 local major_version                           = floor(build_toc_version / 10000)
--- version numbering is X.XX.XX shorten in param 4 as XXXXX
---local SUPPORTED_RETAIL_VERSION                = 90000
---local MAX_SUPPORTED_RETAIL_VERSION            = 90099
---local MAX_SUPPORTED_CLASSIC_VERSION           = 19999
---local MAX_SUPPORTED_TBC_VERSION               = 29999--20501
---local IS_RETAIL_RELEASE                       = (SUPPORTED_RETAIL_VERSION <= build_toc_version and build_toc_version <= MAX_SUPPORTED_RETAIL_VERSION)
---local IS_CLASSIC                              = (build_toc_version <= MAX_SUPPORTED_CLASSIC_VERSION)
---local IS_TBC                                  = (build_toc_version > MAX_SUPPORTED_CLASSIC_VERSION and build_toc_version <= MAX_SUPPORTED_TBC_VERSION)
 
 --@version-retail@
 local MAX_SUPPORTED_VERSION                   = 90099
@@ -19,15 +11,10 @@ local MAX_SUPPORTED_VERSION                   = 19999
 --@end-version-classic@
 
 --@version-bcc@
-local MAX_SUPPORTED_VERSION                   = 20501
+local MAX_SUPPORTED_VERSION                   = 20502
 --@end-version-bcc@
 
---[===[@non-version-classic@
 local AddonBackdropTemplate = "BackdropTemplate"
---@end-non-version-classic@]===]
---@version-classic@
-local AddonBackdropTemplate                   = nil
---@end-version-classic@
 
 local MAX_MAJOR_VERSION                       = floor(MAX_SUPPORTED_VERSION / 10000)
 
@@ -702,12 +689,7 @@ function CoolLine:PET_BAR_UPDATE_COOLDOWN()
     for i = 1, 10 do
         local start, duration, enable = GetPetActionCooldown(i)
         if enable == 1 then
-            local name, _, texture
-            if IS_RETAIL_RELEASE then
-                name, texture = GetPetActionInfo(i)
-            else
-                name, _, texture = GetPetActionInfo(i)
-            end
+            local name, texture = GetPetActionInfo(i)
             if name then
                 if start > 0 and not block[name] then
                     if duration > 3 then
