@@ -1,6 +1,6 @@
 local ORANGEY, LIGHTRED                       = '|cffFF4500', '|cffff6060'
 local version, build, date, build_toc_version = GetBuildInfo()
-local major_version = floor(version / 10000)
+local major_version                           = floor(build_toc_version / 10000)
 -- version numbering is X.XX.XX shorten in param 4 as XXXXX
 --local SUPPORTED_RETAIL_VERSION                = 90000
 --local MAX_SUPPORTED_RETAIL_VERSION            = 90099
@@ -11,15 +11,15 @@ local major_version = floor(version / 10000)
 --local IS_TBC                                  = (build_toc_version > MAX_SUPPORTED_CLASSIC_VERSION and build_toc_version <= MAX_SUPPORTED_TBC_VERSION)
 
 --@version-retail@
-local MAX_SUPPORTED_VERSION = 90099
+local MAX_SUPPORTED_VERSION                   = 90099
 --@end-version-retail@
 
 --@version-classic@
-local MAX_SUPPORTED_VERSION = 19999
+local MAX_SUPPORTED_VERSION                   = 19999
 --@end-version-classic@
 
 --@version-bcc@
-local MAX_SUPPORTED_VERSION = 20501
+local MAX_SUPPORTED_VERSION                   = 20501
 --@end-version-bcc@
 
 --[===[@non-version-classic@
@@ -29,8 +29,7 @@ local AddonBackdropTemplate = "BackdropTemplate"
 local AddonBackdropTemplate                   = nil
 --@end-version-classic@
 
-local MAX_MAJOR_VERSION = floor(MAX_SUPPORTED_VERSION / 10000)
-
+local MAX_MAJOR_VERSION                       = floor(MAX_SUPPORTED_VERSION / 10000)
 
 local CoolLine                                = CreateFrame("Frame", "CoolLine", UIParent)
 CoolLine.MainFrame                            = CoolLine
@@ -51,7 +50,6 @@ if build_toc_version > MAX_SUPPORTED_VERSION or (major_version < MAX_MAJOR_VERSI
     print(format("%sPlease be precise and provide as much intel as needed (PTR realm, release, beta etc.)", ORANGEY))
     print(format("%sMax supported version is |r%s", ORANGEY, MAX_SUPPORTED_VERSION))
 end
-
 
 local smed                                                  = LibStub("LibSharedMedia-3.0")
 
@@ -357,23 +355,21 @@ function CoolLine:PLAYER_LOGIN()
     self.SPELL_UPDATE_CHARGES = self.SPELL_UPDATE_COOLDOWN
     self:SPELL_UPDATE_COOLDOWN()
 
-    -- IF WOW RETAIL THEN
-    if not IS_CLASSIC then
-        self:RegisterEvent("PET_BATTLE_OPENING_START")
-        self:RegisterEvent("PET_BATTLE_CLOSE")
-        self.PET_BATTLE_OPENING_START = self.Hide
-        self.PET_BATTLE_CLOSE         = self.Show
-        if C_PetBattles.IsInBattle() then
-            self:Hide()
-        end
-
-        self:RegisterUnitEvent("UNIT_ENTERED_VEHICLE", "player")
-        if UnitHasVehicleUI("player") then
-            self:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
-            self:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player")
-        end
+    --@version-retail@
+    self:RegisterEvent("PET_BATTLE_OPENING_START")
+    self:RegisterEvent("PET_BATTLE_CLOSE")
+    self.PET_BATTLE_OPENING_START = self.Hide
+    self.PET_BATTLE_CLOSE         = self.Show
+    if C_PetBattles.IsInBattle() then
+        self:Hide()
     end
-    -- END WOW RETAIL
+
+    self:RegisterUnitEvent("UNIT_ENTERED_VEHICLE", "player")
+    if UnitHasVehicleUI("player") then
+        self:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+        self:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player")
+    end
+    --@end-version-retail@
 
     updatelook()
     self:SetAlpha((#cooldowns == 0 and db.inactivealpha) or db.activealpha)

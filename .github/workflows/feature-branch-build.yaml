@@ -52,6 +52,47 @@ jobs:
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ./zip/
+  build-bc:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      #- name: Dump GitHub context
+      #  env:
+      #    GITHUB_CONTEXT: ${{ toJSON(github) }}
+      #  run: echo "$GITHUB_CONTEXT"
+
+      - uses: actions/checkout@v1
+
+      - uses: BigWigsMods/packager@master
+        name: Build Classic
+        with:
+          args: -r ./zip -z -d -g classic
+
+      - name: Name artifact with git hash
+        run: echo 'ARTIFACT_NAME=BC-${{ github.event.repository.name }}-'$(git -C ./zip show --no-patch --format="%H") >> $GITHUB_ENV
+
+      - name: Store built zip
+        uses: actions/upload-artifact@v2
+        with:
+          name : ${{ env.ARTIFACT_NAME }}
+          path: ./zip/
+
+
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+
+  deploy-bc:
+    needs: build-bc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Get artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ./zip/
 
   build-retail:
 
