@@ -29,12 +29,12 @@ jobs:
           args: -r ./zip -z -d -g classic
 
       - name: Name artifact with git hash
-        run: echo 'ARTIFACT_NAME=Classic-${{ github.event.repository.name }}-'$(git -C ./zip show --no-patch --format="%H") >> $GITHUB_ENV
+        run: echo 'ARTIFACT_NAME_CLASSIC=Classic-${{ github.event.repository.name }}-'$(git -C ./zip show --no-patch --format="%H") >> $GITHUB_ENV
 
       - name: Store built zip
         uses: actions/upload-artifact@v2
         with:
-          name : ${{ env.ARTIFACT_NAME }}
+          name : ${{ env.ARTIFACT_NAME_CLASSIC }}
           path: ./zip/
 
 
@@ -50,7 +50,49 @@ jobs:
       - name: Get artifact
         uses: actions/download-artifact@v2
         with:
-          name: ${{ env.ARTIFACT_NAME }}
+          name: ${{ env.ARTIFACT_NAME_CLASSIC }}
+          path: ./zip/
+
+  build-bc:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      #- name: Dump GitHub context
+      #  env:
+      #    GITHUB_CONTEXT: ${{ toJSON(github) }}
+      #  run: echo "$GITHUB_CONTEXT"
+
+      - uses: actions/checkout@v1
+
+      - uses: BigWigsMods/packager@master
+        name: Build Classic
+        with:
+          args: -r ./zip -z -d -g classic
+
+      - name: Name artifact with git hash
+        run: echo 'ARTIFACT_NAME_BC=BC-${{ github.event.repository.name }}-'$(git -C ./zip show --no-patch --format="%H") >> $GITHUB_ENV
+
+      - name: Store built zip
+        uses: actions/upload-artifact@v2
+        with:
+          name : ${{ env.ARTIFACT_NAME_BC }}
+          path: ./zip/
+
+
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+
+  deploy-bc:
+    needs: build-bc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Get artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ env.ARTIFACT_NAME_BC }}
           path: ./zip/
 
   build-retail:
@@ -71,12 +113,12 @@ jobs:
           args: -r ./zip -z -d -g retail
 
       - name: Name artifact with git hash
-        run: echo 'ARTIFACT_NAME=Retail-${{ github.event.repository.name }}-'$(git -C ./zip show --no-patch --format="%H") >> $GITHUB_ENV
+        run: echo 'ARTIFACT_NAME_RETAIL=Retail-${{ github.event.repository.name }}-'$(git -C ./zip show --no-patch --format="%H") >> $GITHUB_ENV
 
       - name: Store built zip
         uses: actions/upload-artifact@v2
         with:
-          name : ${{ env.ARTIFACT_NAME }}
+          name : ${{ env.ARTIFACT_NAME_RETAIL }}
           path: ./zip/
 
 
@@ -92,5 +134,134 @@ jobs:
       - name: Get artifact
         uses: actions/download-artifact@v2
         with:
-          name: ${{ env.ARTIFACT_NAME }}
+          name: ${{ env.ARTIFACT_NAME_RETAIL }}
           path: ./zip/
+
+
+  discord-push-classic:
+    needs: build-classic
+    runs-on: ubuntu-latest
+    steps:
+
+      # checkout
+      - name: Checkout (for proper changelog generation)
+        uses: actions/checkout@v1
+
+      - name: Get artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ env.ARTIFACT_NAME_CLASSIC }}
+
+      - name: Zip dir
+        run: ls && zip -r "Classic-${{ github.event.repository.name }}-${{ github.event.after }}.zip" "${{ github.event.repository.name }}-${{ github.event.after }}/${{ github.event.repository.name }}"
+
+      - name: Get latest release data
+        id: LatestRelease
+        uses: pozetroninc/github-action-get-latest-release@master
+        with:
+          repository: ${{ github.repository }}
+          excludes: prerelease, draft
+
+      - name: Send Discord message with built file
+        uses: appleboy/discord-action@master
+        with:
+          webhook_id: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_ID }}
+          webhook_token: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_TOKEN }}
+          file: "Classic-${{ github.event.repository.name }}-${{ github.event.after }}.zip"
+          message: "** CLASSIC New pre-release pushed**. `${{ github.event.ref }}`\n
+          _This package has been built automatically and comes without warranty._
+          "
+
+      - name: Post changelog
+        uses: appleboy/discord-action@master
+        with:
+          webhook_id: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_ID }}
+          webhook_token: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_TOKEN }}
+          message: "**Changelog since `${{ steps.LatestRelease.outputs.release }}` (latest release)**"
+          file: CHANGELOG.md
+
+
+  discord-push-bc:
+    needs: build-bc
+    runs-on: ubuntu-latest
+    steps:
+
+      # checkout
+      - name: Checkout (for proper changelog generation)
+        uses: actions/checkout@v1
+
+      - name: Get artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ env.ARTIFACT_NAME_BC }}
+
+      - name: Zip dir
+        run: ls && zip -r "BC-${{ github.event.repository.name }}-${{ github.event.after }}.zip" "${{ github.event.repository.name }}-${{ github.event.after }}/${{ github.event.repository.name }}"
+
+      - name: Get latest release data
+        id: LatestRelease
+        uses: pozetroninc/github-action-get-latest-release@master
+        with:
+          repository: ${{ github.repository }}
+          excludes: prerelease, draft
+
+      - name: Send Discord message with built file
+        uses: appleboy/discord-action@master
+        with:
+          webhook_id: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_ID }}
+          webhook_token: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_TOKEN }}
+          file: "BC-${{ github.event.repository.name }}-${{ github.event.after }}.zip"
+          message: "** BC New pre-release pushed**. `${{ github.event.ref }}`\n
+          _This package has been built automatically and comes without warranty._
+          "
+
+      - name: Post changelog
+        uses: appleboy/discord-action@master
+        with:
+          webhook_id: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_ID }}
+          webhook_token: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_TOKEN }}
+          message: "**Changelog since `${{ steps.LatestRelease.outputs.release }}` (latest release)**"
+          file: CHANGELOG.md
+
+  discord-push-retail:
+    needs: build-retail
+    runs-on: ubuntu-latest
+    steps:
+
+      # checkout
+      - name: Checkout (for proper changelog generation)
+        uses: actions/checkout@v1
+
+      - name: Get artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: ${{ env.ARTIFACT_NAME_RETAIL }}
+
+      - name: Zip dir
+        run: ls && zip -r "Retail-${{ github.event.repository.name }}-${{ github.event.after }}.zip" "${{ github.event.repository.name }}-${{ github.event.after }}/${{ github.event.repository.name }}"
+
+      - name: Get latest release data
+        id: LatestRelease
+        uses: pozetroninc/github-action-get-latest-release@master
+        with:
+          repository: ${{ github.repository }}
+          excludes: prerelease, draft
+
+      - name: Send Discord message with built file
+        uses: appleboy/discord-action@master
+        with:
+          webhook_id: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_ID }}
+          webhook_token: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_TOKEN }}
+          file: "Retail-${{ github.event.repository.name }}-${{ github.event.after }}.zip"
+          message: "** RETAIL New pre-release pushed**. `${{ github.event.ref }}`\n
+          _This package has been built automatically and comes without warranty._
+          "
+
+      - name: Post changelog
+        uses: appleboy/discord-action@master
+        with:
+          webhook_id: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_ID }}
+          webhook_token: ${{ secrets.DISCORD_COOLLINE_WEBHOOK_TOKEN }}
+          message: "**Changelog since `${{ steps.LatestRelease.outputs.release }}` (latest release)**"
+          file: CHANGELOG.md
+
