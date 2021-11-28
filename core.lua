@@ -1,14 +1,6 @@
 local ORANGEY, LIGHTRED                       = '|cffFF4500', '|cffff6060'
 local version, build, date, build_toc_version = GetBuildInfo()
 local major_version                           = floor(build_toc_version / 10000)
--- version numbering is X.XX.XX shorten in param 4 as XXXXX
---local SUPPORTED_RETAIL_VERSION                = 90000
---local MAX_SUPPORTED_RETAIL_VERSION            = 90099
---local MAX_SUPPORTED_CLASSIC_VERSION           = 19999
---local MAX_SUPPORTED_TBC_VERSION               = 29999--20501
---local IS_RETAIL_RELEASE                       = (SUPPORTED_RETAIL_VERSION <= build_toc_version and build_toc_version <= MAX_SUPPORTED_RETAIL_VERSION)
---local IS_CLASSIC                              = (build_toc_version <= MAX_SUPPORTED_CLASSIC_VERSION)
---local IS_TBC                                  = (build_toc_version > MAX_SUPPORTED_CLASSIC_VERSION and build_toc_version <= MAX_SUPPORTED_TBC_VERSION)
 
 --@version-retail@
 local MAX_SUPPORTED_VERSION                   = 90099
@@ -22,12 +14,7 @@ local MAX_SUPPORTED_VERSION                   = 19999
 local MAX_SUPPORTED_VERSION                   = 20502
 --@end-version-bcc@
 
---[===[@non-version-classic@
 local AddonBackdropTemplate = "BackdropTemplate"
---@end-non-version-classic@]===]
---@version-classic@
-local AddonBackdropTemplate                   = nil
---@end-version-classic@
 
 local MAX_MAJOR_VERSION                       = floor(MAX_SUPPORTED_VERSION / 10000)
 
