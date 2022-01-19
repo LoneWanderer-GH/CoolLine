@@ -1,7 +1,7 @@
 ## Interface: 11307
 ## Interface-Retail: 90005
-## Interface-BCC: 20501
-## Interface-Classic: 11307
+## Interface-BCC: 20503
+## Interface-Classic: 11401
 ## Version: @project-version@
 ## Title: |cFF22B14CCoolLine v|r@project-version@
 
