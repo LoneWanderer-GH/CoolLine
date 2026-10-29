@@ -1,6 +1,7 @@
 local ORANGEY, LIGHTRED                       = '|cffFF4500', '|cffff6060'
 local version, build, date, build_toc_version = GetBuildInfo()
 local major_version                           = floor(build_toc_version / 10000)
+local IS_RETAIL_RELEASE                       = (WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE) or major_version >= 9
 -- version numbering is X.XX.XX shorten in param 4 as XXXXX
 --local SUPPORTED_RETAIL_VERSION                = 90000
 --local MAX_SUPPORTED_RETAIL_VERSION            = 90099
@@ -842,25 +843,30 @@ function ShowOptions(a1)
         Set                    = function(b, a1)
             if a1 == "unlock" then
                 if not CoolLine.resizer then
-                    CoolLine:SetMovable(true)
                     CoolLine:SetResizable(true)
-                    CoolLine:RegisterForDrag("LeftButton")
+                    local wrapperLoaded = IsAddOnLoaded and IsAddOnLoaded("ElvUI_CoolLine_Wrapper")
+                    CoolLine:SetMovable(not wrapperLoaded)
+                    if not wrapperLoaded then
+                        CoolLine:RegisterForDrag("LeftButton")
+                    end
                     CoolLine:SetScript("OnMouseUp", function(this, a1)
                         if a1 == "RightButton" then
                             ShowOptions()
                         end
                     end)
-                    CoolLine:SetScript("OnDragStart", function(this)
-                        this:StartMoving()
-                    end)
-                    CoolLine:SetScript("OnDragStop", function(this)
-                        this:StopMovingOrSizing()
-                        local x, y   = this:GetCenter()
-                        local ux, uy = UIParent:GetCenter()
-                        db.x, db.y   = floor(x - ux + 0.5), floor(y - uy + 0.5)
-                        this:ClearAllPoints()
-                        updatelook()
-                    end)
+                    if not wrapperLoaded then
+                        CoolLine:SetScript("OnDragStart", function(this)
+                            this:StartMoving()
+                        end)
+                        CoolLine:SetScript("OnDragStop", function(this)
+                            this:StopMovingOrSizing()
+                            local x, y   = this:GetCenter()
+                            local ux, uy = UIParent:GetCenter()
+                            db.x, db.y   = floor(x - ux + 0.5), floor(y - uy + 0.5)
+                            this:ClearAllPoints()
+                            updatelook()
+                        end)
+                    end
 
                     CoolLine:SetMinResize(6, 6)
                     CoolLine.resizer = CreateFrame("Button", nil, CoolLine.border, "UIPanelButtonTemplate")
