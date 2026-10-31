@@ -15,6 +15,10 @@ It is the original CoolLine modified to be compatible with an addon I made: [Elv
 [![](http://cf.way2muchnoise.eu/full_356978_downloads.svg)](https://www.curseforge.com/wow/addons/coolline-classic-updated)
 ![](https://github.com/LoneWanderer-GH/CoolLine/actions/workflows/build.yml/badge.svg)
 
+Upcoming features:
+
+![](./docs/img/BlizzardTimeLineIntegration.png)
+
 ## Maintenance
 
 Compatibility findings, development setup, CI details, and the per-patch update
