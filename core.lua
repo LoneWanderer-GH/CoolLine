@@ -31,17 +31,26 @@ local MAX_SUPPORTED_VERSION                   = 120105
 local MAX_SUPPORTED_VERSION                   = 19999
 --@end-version-classic@
 
+--@version-forever@
+local MAX_SUPPORTED_VERSION                   = 16001
+--@end-version-forever@
+
 --@version-bcc@
 local MAX_SUPPORTED_VERSION                   = 20599
 --@end-version-bcc@
 
 --@version-wotlk@
--- local MAX_SUPPORTED_VERSION                   = 20599
+local MAX_SUPPORTED_VERSION                   = 30405
 --@end-version-wotlk@
 
---@version-forever@
---local MAX_SUPPORTED_VERSION                   = 20599
---@end-version-forever@
+--@version-CATA@
+local MAX_SUPPORTED_VERSION                   = 40402
+--@end-version-CATA@
+
+--@version-MISTS@
+local MAX_SUPPORTED_VERSION                   = 50504
+--@end-version-MISTS@
+
 
 --[===[@non-version-classic@
 local AddonBackdropTemplate = "BackdropTemplate"
