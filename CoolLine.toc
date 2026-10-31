@@ -1,8 +1,8 @@
 ## Interface: 11307
 ## Interface-Retail: 120105
-## Interface-BCC: 20503
-## Interface-WOTLK: 20503
-## Interface-Classic: 11401
+## Interface-BCC: 20506
+## Interface-WOTLK: 30405
+## Interface-Classic: 11509
 ## Interface-Forever: 16001
 ## X-WoWAddonTooling-Targets: retail, classic, bcc
 ## Version: @project-version@
