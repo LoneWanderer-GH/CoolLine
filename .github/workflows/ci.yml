@@ -13,4 +13,4 @@ permissions:
 
 jobs:
   package:
-    uses: LoneWanderer-GH/WoWAddonTooling/.github/workflows/addon-ci.yml@v1.0.5
+    uses: LoneWanderer-GH/WoWAddonTooling/.github/workflows/addon-ci.yml@v1.0.6
