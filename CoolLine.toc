@@ -1,10 +1,12 @@
 ## Interface: 11307
 ## Interface-Retail: 120105
 ## Interface-BCC: 20506
-## Interface-WOTLK: 30405
+## Interface-WRATH: 30405
+## Interface-MISTS: 50504
+## Interface-CATA: 40402
 ## Interface-Classic: 11509
 ## Interface-Forever: 16001
-## X-WoWAddonTooling-Targets: retail, classic, bcc
+## X-WoWAddonTooling-Targets: retail, classic, bcc, wrath, cata, mists
 ## Version: @project-version@
 ## Title: |cFF22B14CCoolLine v|r@project-version@
 
@@ -20,6 +22,9 @@
 #@version-wotlk@
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (WOTLK)|r modifications by |cff00ffda@project-author@
 #@end-version-wotlk@
+#@version-cata@
+## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Cataclysm)|r modifications by |cff00ffda@project-author@
+#@end-version-cata@
 
 ## Author: TotalPackage, Phanx, |cff00ffda@project-author@|r with contributions from |cFF22B14Ccapoferro
 
