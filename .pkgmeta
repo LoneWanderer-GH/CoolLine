@@ -2,7 +2,37 @@ package-as: CoolLine
 
 enable-nolib-creation: no
 
+ignore:
+  - addon-tooling
+  - .github
+  - .vscode
+  - MAINTENANCE.md
+  - lint.sh
+
 externals:
    Libs/CallbackHandler-1.0: svn://svn.wowace.com/wow/callbackhandler/mainline/trunk/CallbackHandler-1.0
    Libs/LibSharedMedia-3.0: svn://svn.wowace.com/wow/libsharedmedia-3-0/mainline/trunk/LibSharedMedia-3.0
    Libs/LibStub: svn://svn.wowace.com/wow/libstub/mainline/tags/1.0
+   <!-- Libs/AceEvent-3.0:
+    url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceEvent-3.0
+    tag: latest
+   Libs/AceConfig-3.0:
+     url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceConfig-3.0
+     tag: latest
+   Libs/AceConsole-3.0:
+     url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceConsole-3.0
+     tag: latest
+   Libs/AceAddon-3.0:
+     url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceAddon-3.0
+     tag: latest
+   Libs/AceGUI-3.0:
+     url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceGUI-3.0
+     tag: latest
+   Libs/AceLocale-3.0:
+     url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceLocale-3.0
+     tag: latest
+   Libs/AceDB-3.0:
+     url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceDB-3.0
+     tag: latest
+#  Libs/LoggingLib:
+#    url: https://github.com/LoneWanderer-GH/LoggingLib -->

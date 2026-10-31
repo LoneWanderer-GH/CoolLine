@@ -1,7 +1,10 @@
 ## Interface: 11307
-## Interface-Retail: 90005
+## Interface-Retail: 120105
 ## Interface-BCC: 20503
+## Interface-WOTLK: 20503
 ## Interface-Classic: 11401
+## Interface-Forever: 16001
+## X-WoWAddonTooling-Targets: retail, classic, bcc
 ## Version: @project-version@
 ## Title: |cFF22B14CCoolLine v|r@project-version@
 
@@ -14,6 +17,9 @@
 #@version-bcc@
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Burning Crusade)|r modifications by |cff00ffda@project-author@
 #@end-version-bcc@
+#@version-wotlk@
+## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (WOTLK)|r modifications by |cff00ffda@project-author@
+#@end-version-wotlk@
 
 ## Author: TotalPackage, Phanx, |cff00ffda@project-author@|r with contributions from |cFF22B14Ccapoferro
 
@@ -24,6 +30,10 @@
 
 ## OptionalDeps: LibSharedMedia-3.0
 
+#@debug@
+## OptionalDeps: _DebugLog
+#@end-debug@
+
 ## LoadManagers: AddonLoader
 ## X-LoadOn-Always: delayed
 
@@ -33,5 +43,18 @@ Libs\LibStub\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
 
-core.lua
+# # refacto
+# libs\AceGUI-3.0\AceGUI-3.0.xml
+# libs\AceAddon-3.0\AceAddon-3.0.xml
+# libs\AceConfig-3.0\AceConfig-3.0.xml
+# libs\AceConsole-3.0\AceConsole-3.0.xml
+# libs\AceEvent-3.0\AceEvent-3.0.xml
+# libs\AceLocale-3.0\AceLocale-3.0.xml
+# libs\AceDB-3.0\AceDB-3.0.xml
+# #@debug@
+# libs\LoggingLib\LoggingLib.xml
+# #@end-debug@
 
+compat.lua
+
+core.lua
