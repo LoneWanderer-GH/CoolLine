@@ -2,6 +2,8 @@ name: Addon CI
 
 on:
   push:
+    branches:
+    - 'feature/**'
   pull_request:
   workflow_dispatch:
 
@@ -10,4 +12,4 @@ permissions:
 
 jobs:
   package:
-    uses: LoneWanderer-GH/WoWAddonTooling/.github/workflows/addon-ci.yml@v1.0.3
+    uses: LoneWanderer-GH/WoWAddonTooling/.github/workflows/addon-ci.yml@v1.0.4
