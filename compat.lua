@@ -4,6 +4,11 @@ local CoolLine = LibStub("AceAddon-3.0"):GetAddon(addonName).MainFrame
 
 local _G = _G
 
+function CoolLine:IsSecretValueCompat(value)
+    local isSecretValue = _G.issecretvalue
+    return isSecretValue and isSecretValue(value) or false
+end
+
 -- compat functions for mutiple clients
 function CoolLine:GetSpellCooldownCompat(spellID)
     if GetSpellCooldown then

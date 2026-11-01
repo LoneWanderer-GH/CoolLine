@@ -4,6 +4,7 @@ local CoolLine = CoolLineApp.MainFrame
 local AceConfig = LibStub("AceConfig-3.0")
 local AceConfigDialog = LibStub("AceConfigDialog-3.0")
 local smed = LibStub("LibSharedMedia-3.0")
+local blizzardOptionsFrame, blizzardOptionsCategoryID
 
 local function mediaValues(kind)
     local values = {}
@@ -85,7 +86,14 @@ function CoolLine:SetBlockedFilter(name, blocked)
 end
 
 function CoolLine:OpenOptions()
-    AceConfigDialog:Open("CoolLineOptions")
+    if blizzardOptionsCategoryID and Settings and Settings.OpenToCategory then
+        Settings.OpenToCategory(blizzardOptionsCategoryID)
+    elseif blizzardOptionsFrame and InterfaceOptionsFrame_OpenToCategory then
+        InterfaceOptionsFrame_OpenToCategory(blizzardOptionsFrame)
+        InterfaceOptionsFrame_OpenToCategory(blizzardOptionsFrame)
+    else
+        print("CoolLine: Blizzard options category is unavailable.")
+    end
 end
 
 function CoolLine:ToggleUnlock()
@@ -481,5 +489,6 @@ function CoolLine:SetupOptions()
     }
 
     AceConfig:RegisterOptionsTable("CoolLineOptions", options)
-    AceConfigDialog:AddToBlizOptions("CoolLineOptions", "CoolLine")
+    blizzardOptionsFrame, blizzardOptionsCategoryID =
+        AceConfigDialog:AddToBlizOptions("CoolLineOptions", "CoolLine")
 end

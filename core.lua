@@ -444,7 +444,7 @@ local function OnUpdate(this, a1, ctime, dofl)
         if frame.endtime then
             remain = frame.endtime - ctime
         elseif frame.remaining_duration then
-            remain = frame.remaining_duration
+            remain = frame.remaining_duration - (ctime - (frame.cooldownSampleTime or ctime))
         else
             --
         end
@@ -559,6 +559,9 @@ end
 
 local function NewCooldownRetail(name, icon, remaining_duration, isplayer, spellID, source)
     --name, id, duration, btype == BOOKTYPE_SPELL
+    if CoolLine:IsSecretValueCompat(remaining_duration) then
+        return
+    end
     if not name or not icon or not remaining_duration then
         print("CoolLine: NewCooldownRetail called with missing parameters:", name, icon, remaining_duration, isplayer, spellID)
         return
@@ -809,25 +812,29 @@ do
         local source = btype == BOOKTYPE_SPELL and "player" or "pet"
         for id, name in pairs(spells[btype]) do
             local remaining_duration = CoolLine:GetSpellCooldownDurationCompat(id)
-            if remaining_duration and remaining_duration > DEFAULT_RETAIL_GCD_DURATION_S
-                and not IsBlocked(name, id) then
-                local _, _, texture = CoolLine:GetSpellInfoCompat(id)
-                NewCooldownRetail(name, texture, remaining_duration, btype == BOOKTYPE_SPELL, id,
-                    btype == BOOKTYPE_SPELL and "player" or "pet")
-            else
-                ClearCooldown(nil, name, source)
+            if not CoolLine:IsSecretValueCompat(remaining_duration) then
+                if remaining_duration and remaining_duration > DEFAULT_RETAIL_GCD_DURATION_S
+                    and not IsBlocked(name, id) then
+                    local _, _, texture = CoolLine:GetSpellInfoCompat(id)
+                    NewCooldownRetail(name, texture, remaining_duration, btype == BOOKTYPE_SPELL, id,
+                        btype == BOOKTYPE_SPELL and "player" or "pet")
+                else
+                    ClearCooldown(nil, name, source)
+                end
             end
         end
 
         for id, name in pairs(chargespells[btype]) do
             local remaining_duration = CoolLine:GetSpellChargeDurationCompat(id)
-            if remaining_duration and remaining_duration > DEFAULT_RETAIL_GCD_DURATION_S
-                and not IsBlocked(name, id) then
-                local _, _, texture = CoolLine:GetSpellInfoCompat(id)
-                NewCooldownRetail(name, texture, remaining_duration, btype == BOOKTYPE_SPELL, id,
-                    btype == BOOKTYPE_SPELL and "player" or "pet")
-            else
-                ClearCooldown(nil, name, source)
+            if not CoolLine:IsSecretValueCompat(remaining_duration) then
+                if remaining_duration and remaining_duration > DEFAULT_RETAIL_GCD_DURATION_S
+                    and not IsBlocked(name, id) then
+                    local _, _, texture = CoolLine:GetSpellInfoCompat(id)
+                    NewCooldownRetail(name, texture, remaining_duration, btype == BOOKTYPE_SPELL, id,
+                        btype == BOOKTYPE_SPELL and "player" or "pet")
+                else
+                    ClearCooldown(nil, name, source)
+                end
             end
         end
     end
