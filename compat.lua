@@ -200,3 +200,25 @@ function CoolLine:GetContainerItemIconCompat(bagID, slotID)
         return info and info.iconFileID -- Retail returns table with an iconFileID key
     end
 end
+
+
+
+
+-- Midnight: Secret-safe spell cooldown
+function CoolLine:GetSpellCooldownDurationCompat(spellID)
+    if C_Spell and C_Spell.GetSpellCooldownDuration then
+        local duration = C_Spell.GetSpellCooldownDuration(spellID)
+        return duration:GetRemainingDuration()
+    end
+    return nil
+end
+
+-- Midnight: Secret-safe spell charge cooldown
+function CoolLine:GetSpellChargeDurationCompat(spellID)
+    if C_Spell and C_Spell.GetSpellChargeDuration then
+        return C_Spell.GetSpellChargeDuration(spellID)
+    end
+
+    return nil
+end
+

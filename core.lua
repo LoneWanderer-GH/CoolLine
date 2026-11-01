@@ -13,52 +13,26 @@ local addonName, addonTable = ...
 local ORANGEY, LIGHTRED                       = '|cffFF4500', '|cffff6060'
 local version, build, date, build_toc_version = GetBuildInfo()
 local major_version                           = floor(build_toc_version / 10000)
-local IS_RETAIL_RELEASE                       = (WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE) or major_version >= 9
--- version numbering is X.XX.XX shorten in param 4 as XXXXX
---local SUPPORTED_RETAIL_VERSION                = 90000
---local MAX_SUPPORTED_RETAIL_VERSION            = 90099
---local MAX_SUPPORTED_CLASSIC_VERSION           = 19999
---local MAX_SUPPORTED_TBC_VERSION               = 29999--20501
---local IS_RETAIL_RELEASE                       = (SUPPORTED_RETAIL_VERSION <= build_toc_version and build_toc_version <= MAX_SUPPORTED_RETAIL_VERSION)
---local IS_CLASSIC                              = (build_toc_version <= MAX_SUPPORTED_CLASSIC_VERSION)
---local IS_TBC                                  = (build_toc_version > MAX_SUPPORTED_CLASSIC_VERSION and build_toc_version <= MAX_SUPPORTED_TBC_VERSION)
+local IS_RETAIL_RELEASE                       = (WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE) or major_version >= 10
 
---@version-retail@
-local MAX_SUPPORTED_VERSION                   = 120105
---@end-version-retail@
+local MAX_SUPPORTED_VERSION_TABLE = {
+    [WOW_PROJECT_MAINLINE]                = 120105,
+    [WOW_PROJECT_CLASSIC]                 =  19999,
+    -- provision [WOW_PROJECT_FOREVER]                 =  16001,
+    -- provision [WOW_PROJECT_BURNING_CRUSADE_CLASSIC] =  20599,
+    -- provision [WOW_PROJECT_WRATH_CLASSIC]           =  30405,
+    -- provision [WOW_PROJECT_CATACLYSM_CLASSIC]       =  40402,
+    -- provision [WOW_PROJECT_MISTS_CLASSIC]           =  50504,
+}
 
---@version-classic@
-local MAX_SUPPORTED_VERSION                   = 19999
---@end-version-classic@
+local AddonBackdropTemplate = 42
+if WOW_PROJECT_ID == WOW_PROJECT_CLASSIC then
+    AddonBackdropTemplate = nil
+else
+    AddonBackdropTemplate = "BackdropTemplate"
+end
 
---@version-forever@
-local MAX_SUPPORTED_VERSION                   = 16001
---@end-version-forever@
-
---@version-bcc@
-local MAX_SUPPORTED_VERSION                   = 20599
---@end-version-bcc@
-
---@version-wotlk@
-local MAX_SUPPORTED_VERSION                   = 30405
---@end-version-wotlk@
-
---@version-CATA@
-local MAX_SUPPORTED_VERSION                   = 40402
---@end-version-CATA@
-
---@version-MISTS@
-local MAX_SUPPORTED_VERSION                   = 50504
---@end-version-MISTS@
-
-
---[===[@non-version-classic@
-local AddonBackdropTemplate = "BackdropTemplate"
---@end-non-version-classic@]===]
---@version-classic@
-local AddonBackdropTemplate                   = nil
---@end-version-classic@
-
+local MAX_SUPPORTED_VERSION                   = MAX_SUPPORTED_VERSION_TABLE[WOW_PROJECT_ID]
 local MAX_MAJOR_VERSION                       = floor(MAX_SUPPORTED_VERSION / 10000)
 
 local CoolLine                                = CreateFrame("Frame", "CoolLine", UIParent)
@@ -478,6 +452,7 @@ local function ClearCooldown(f, name)
             frame:Hide()
             frame.name    = nil
             frame.endtime = nil
+            frame.remaining_duration = nil
             tinsert(frames, tremove(cooldowns, i))
             break
         end
@@ -583,7 +558,14 @@ local function OnUpdate(this, a1, ctime, dofl)
     isactive, throt = false, 1.5
 
     for index, frame in pairs(cooldowns) do
-        local remain = frame.endtime - ctime
+        local remain
+        if frame.endtime then
+            remain = frame.endtime - ctime
+        elseif frame.remaining_duration then
+            remain = frame.remaining_duration
+        else
+            --
+        end
         if remain < 3 then
             if remain > 1 then
                 SetupIcon(frame, section * (remain + 1) * 0.5, 0.02, true, dofl)  -- 1 + (remain - 1) / 2
@@ -643,22 +625,68 @@ local RefreshCooldownDisplay = function()
     end
 end
 
-local function NewCooldown(name, icon, endtime, isplayer, spellID)
+local function NewCooldownClassic(name, icon, endtime, isplayer, spellID)
     if not name or not icon or not endtime then
-        print("CoolLine: NewCooldown called with missing parameters:", name, icon, endtime, isplayer, spellID)
+        print("CoolLine: NewCooldownClassic called with missing parameters:", name, icon, endtime, isplayer, spellID)
         return
     end
-    -- print("CoolLine: NewCooldown called with parameters:", name, icon, endtime, isplayer, spellID)
+    -- print("CoolLine: NewCooldownClassic called with parameters:", name, icon, endtime, isplayer, spellID)
+    local frame
+    for index, existing_frame in pairs(cooldowns) do
+        if existing_frame.name == name and existing_frame.isplayer == isplayer then
+            frame = existing_frame
+            break
+        elseif existing_frame.endtime == endtime then
+            return
+        -- ROBUSTNESS ? elseif existing_frame.remaining_duration == 0 then
+        --     return
+        end
+    end
+
+    if not frame then
+        frame = frame or tremove(frames)
+        if not frame then
+            frame = CreateFrame("Frame", nil, CoolLine.border, AddonBackdropTemplate)
+            frame:SetBackdrop(iconback)
+            frame.icon = frame:CreateTexture(nil, "ARTWORK")
+            frame.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+            frame.icon:SetPoint("TOPLEFT", 1, -1)
+            frame.icon:SetPoint("BOTTOMRIGHT", -1, 1)
+            -- print("CoolLine: Created new cooldown frame with parameters:", name, icon, endtime, isplayer, spellID)
+        end
+        tinsert(cooldowns, frame)
+    end
+
+    local ctime = GetTime()
+    frame:SetWidth(iconsize)
+    frame:SetHeight(iconsize)
+    frame:SetAlpha((endtime - ctime > 360) and 0.6 or 1)
+
+    frame.name, frame.endtime, frame.isplayer, frame.spellID, frame.iconTexture = name, endtime, isplayer, spellID, icon
+    frame.icon:SetTexture(icon)
+    SyncTimelineEvent(frame)
+
+    local c = db[isplayer and "spellcolor" or "nospellcolor"]
+    frame:SetBackdropColor(c.r, c.g, c.b, c.a)
+    RefreshCooldownDisplay()
+end
+
+local function NewCooldownRetail(name, icon, remaining_duration, isplayer, spellID)
+    --name, id, duration, btype == BOOKTYPE_SPELL
+    if not name or not icon or not remaining_duration then
+        print("CoolLine: NewCooldownRetail called with missing parameters:", name, icon, remaining_duration, isplayer, spellID)
+        return
+    end
+    -- print("CoolLine: NewCooldownRetail called with parameters:", name, icon, endtime, isplayer, spellID)
     local f
     for index, frame in pairs(cooldowns) do
         if frame.name == name and frame.isplayer == isplayer then
             f = frame
             break
-        elseif frame.endtime == endtime then
-            return
+        -- elseif frame.endtime == endtime then
+        --     return
         end
     end
-
     if not f then
         f = f or tremove(frames)
         if not f then
@@ -672,13 +700,11 @@ local function NewCooldown(name, icon, endtime, isplayer, spellID)
         end
         tinsert(cooldowns, f)
     end
-
-    local ctime = GetTime()
     f:SetWidth(iconsize)
     f:SetHeight(iconsize)
-    f:SetAlpha((endtime - ctime > 360) and 0.6 or 1)
+    f:SetAlpha((remaining_duration > 360.) and 0.6 or 1)
 
-    f.name, f.endtime, f.isplayer, f.spellID, f.iconTexture = name, endtime, isplayer, spellID, icon
+    f.name, f.remaining_duration, f.isplayer, f.spellID, f.iconTexture = name, remaining_duration, isplayer, spellID, icon
     f.icon:SetTexture(icon)
     SyncTimelineEvent(f)
 
@@ -687,7 +713,7 @@ local function NewCooldown(name, icon, endtime, isplayer, spellID)
     RefreshCooldownDisplay()
 end
 
-CoolLine.NewCooldown, CoolLine.ClearCooldown = NewCooldown, ClearCooldown
+CoolLine.NewCooldownClassic, CoolLine.ClearCooldown, CoolLine.NewCooldownRetail = NewCooldownClassic, ClearCooldown, NewCooldownRetail
 
 do
     -- cache spells that have a cooldown
@@ -839,17 +865,13 @@ do
     -- local GetSpellCooldown, GetSpellTexture, GetSpellCharges = GetSpellCooldown, GetSpellTexture, GetSpellCharges
     -- local GetSpellTexture = GetSpellTexture
 
-    local function CheckSpellBook(btype)
+    local function CheckSpellBookLegacy(btype)
         for id, name in pairs(spells[btype]) do
             local start, duration, enable = CoolLine:GetSpellCooldownCompat(id)
             if enable == 1 and start > 0 and not block[name] and (not RuneCheck or RuneCheck(name, duration)) then
                 if duration > DEFAULT_RETAIL_GCD_DURATION_S then
-                    -- local _, _, texture = GetSpellInfo(id)
                     local _, _, texture = CoolLine:GetSpellInfoCompat(id)
-                    -- if id == 17 then
-                    --     print("CoolLine: Adding cooldown for spell:", name, "ID:", id, "Texture:", texture, "Start:", start, "Duration:", duration)
-                    -- end
-                    NewCooldown(name, texture, start + duration, btype == BOOKTYPE_SPELL, id)
+                    NewCooldownClassic(name, texture, start + duration, btype == BOOKTYPE_SPELL, id)
                 else
                     for i = 1, #cooldowns do
                         local frame = cooldowns[i]
@@ -868,10 +890,6 @@ do
                     end
                 end
             else
-                -- if id == 17 then
-                --     print("CoolLine: Clearing cooldown for spell:", name, "ID:", id, "Start:", start, "Duration:", duration, "Enable:", enable)
-                --     print("Reasons for clearing: enable != 1:", enable ~= 1, "start <= 0:", start <= 0, "blocked:", block[name], "RuneCheck failed:", RuneCheck and not RuneCheck(name, duration))
-                -- end
                 ClearCooldown(nil, name)
             end
         end
@@ -882,13 +900,54 @@ do
                 --local _, _, texture = GetSpellInfo(id)
                 local _, _, texture = CoolLine:GetSpellInfoCompat(id)
                 -- print("CoolLine: Adding cooldown for charge spell:", name, "ID:", id, "Texture:", texture, "Cooldown Start:", cooldownStart, "Cooldown Duration:", cooldownDuration)
-                NewCooldown(name, texture, cooldownStart + cooldownDuration, btype == BOOKTYPE_SPELL, id)
+                NewCooldownClassic(name, texture, cooldownStart + cooldownDuration, btype == BOOKTYPE_SPELL, id)
             else
                 ClearCooldown(nil, name)
             end
         end
     end
 
+    local function CheckSpellBookRetail(btype)
+        for id, name in pairs(spells[btype]) do
+            local info = C_Spell.GetSpellCooldown(id)
+
+            if info and info.isActive and not block[name] then
+                local remaining_duration = CoolLine:GetSpellCooldownDurationCompat(id)
+                
+                if remaining_duration then
+                    local _, _, texture = CoolLine:GetSpellInfoCompat(id)
+                    -- name, icon, remaining_time, isplayer, spellID
+                    NewCooldownRetail(name, texture, remaining_duration, btype == BOOKTYPE_SPELL, id)
+                else
+                    for i = 1, #cooldowns do
+                        local frame = cooldowns[i]
+                        if frame.name == name then
+                            if frame.duration > remaining_duration + 0.1 then
+                                frame.duration = remaining_duration
+                                    if remaining_duration > DEFAULT_RETAIL_GCD_DURATION_S then
+                                        SyncTimelineEvent(frame)
+                                    else
+                                        frame.spellID = nil
+                                        SyncTimelineEvent(frame)
+                                    end
+                            end
+                            break
+                        end
+                    end
+                end
+            else
+                ClearCooldown(nil, name)
+            end
+        end
+    end
+
+    local function CheckSpellBook(btype)
+        if IS_RETAIL_RELEASE then
+            CheckSpellBookRetail(btype)
+        else
+            CheckSpellBookLegacy(btype)
+        end
+    end
     spellthrot:SetScript("OnUpdate", function(this, a1)
         selap = selap + a1
         if selap < 0.3 then
@@ -940,7 +999,7 @@ do
                     if duration > DEFAULT_RETAIL_GCD_DURATION_S and duration < DEFAULT_RETAIL_MAX_DURATION_S then
                         local texture = GetInventoryItemTexture("player", i)
                         -- print("CoolLine: Adding cooldown for item:", name, "Texture:", texture, "Start:", start, "Duration:", duration)
-                        NewCooldown(name, texture, start + duration)
+                        NewCooldownClassic(name, texture, start + duration)
                     end
                 else
                     ClearCooldown(nil, name)
@@ -962,7 +1021,7 @@ do
                             -- NewCooldown(name, GetContainerItemInfo(i, j), start + duration)
                             local texture = CoolLine:GetContainerItemIconCompat(i, j)
                             -- print("CoolLine: Adding cooldown for bag item:", name, "Texture:", texture, "Start:", start, "Duration:", duration) 
-                            NewCooldown(name, texture, start + duration)
+                            NewCooldownClassic(name, texture, start + duration)
                         end
                     else
                         ClearCooldown(nil, name)
@@ -989,7 +1048,7 @@ function CoolLine:PET_BAR_UPDATE_COOLDOWN()
                 if start > 0 and not block[name] then
                     if duration > DEFAULT_RETAIL_GCD_DURATION_S then
                         -- print("CoolLine: Adding cooldown for pet action:", name, "Texture:", texture, "Start:", start, "Duration:", duration)
-                        NewCooldown(name, texture, start + duration)
+                        NewCooldownClassic(name, texture, start + duration)
                     end
                 else
                     ClearCooldown(nil, name)
@@ -1021,7 +1080,7 @@ function CoolLine:ACTIONBAR_UPDATE_COOLDOWN()
             if enable == 1 then
                 if start > 0 and not block[GetActionInfo(b.action)] then
                     if duration > DEFAULT_RETAIL_GCD_DURATION_S then
-                        NewCooldown("vehicle" .. i, GetActionTexture(b.action), start + duration)
+                        NewCooldownClassic("vehicle" .. i, GetActionTexture(b.action), start + duration)
                     end
                 else
                     ClearCooldown(nil, "vehicle" .. i)
@@ -1069,7 +1128,7 @@ function CoolLine:UNIT_SPELLCAST_FAILED(unit, spell, id8)
 
     for index, frame in pairs(cooldowns) do
         if frame.name == spell then
-            if frame.endtime - GetTime() > 1 then
+            if (frame.endtime and frame.endtime - GetTime() > 1) or frame.remaining_duration and frame.remaining_duration > 1 then
                 if not failborder then
                     failborder = CreateFrame("Frame", nil, CoolLine.border, AddonBackdropTemplate)
                     failborder:SetBackdrop(iconback)
