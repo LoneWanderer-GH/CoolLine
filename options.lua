@@ -181,38 +181,40 @@ function CoolLine:SetupOptions()
                         disabled = timelineDisabled,
                         order = 2,
                     },
-                    timelinePlayer = {
-                        type = "toggle",
-                        name = "Player spells",
-                        desc = "Route player spell cooldowns to the Blizzard timeline.",
-                        get = optionGet,
-                        set = optionSet,
-                        disabled = function()
-                            return timelineDisabled() or not CoolLine.db.blizzardTimeline
-                        end,
-                        order = 3,
-                    },
-                    timelinePet = {
-                        type = "toggle",
-                        name = "Pet spells",
-                        desc = "Route pet spellbook cooldowns to the Blizzard timeline when a spell ID is available.",
-                        get = optionGet,
-                        set = optionSet,
-                        disabled = function()
-                            return timelineDisabled() or not CoolLine.db.blizzardTimeline
-                        end,
-                        order = 4,
-                    },
-                    timelineItem = {
-                        type = "toggle",
-                        name = "Items",
-                        desc = "Route item cooldowns to the Blizzard timeline when the item's use spell can be identified.",
-                        get = optionGet,
-                        set = optionSet,
+                    sources = {
+                        type = "group",
+                        name = "Cooldown sources",
+                        inline = true,
                         disabled = function()
                             return timelineDisabled() or not CoolLine.db.blizzardTimeline
                         end,
                         order = 5,
+                        args = {
+                            timelinePlayer = {
+                                type = "toggle",
+                                name = "Player spells",
+                                desc = "Route player spell cooldowns to the Blizzard timeline.",
+                                get = optionGet,
+                                set = optionSet,
+                                order = 1,
+                            },
+                            timelinePet = {
+                                type = "toggle",
+                                name = "Pet spells",
+                                desc = "Route pet spellbook cooldowns to the Blizzard timeline when a spell ID is available.",
+                                get = optionGet,
+                                set = optionSet,
+                                order = 2,
+                            },
+                            timelineItem = {
+                                type = "toggle",
+                                name = "Items",
+                                desc = "Route item cooldowns to the Blizzard timeline when the item's use spell can be identified.",
+                                get = optionGet,
+                                set = optionSet,
+                                order = 3,
+                            },
+                        },
                     },
                 },
             },
@@ -249,7 +251,7 @@ function CoolLine:SetupOptions()
                         type = "range",
                         name = "Width",
                         min = 10,
-                        max = 500,
+                        max = 180,
                         step = 1,
                         get = function() return CoolLine.db.w end,
                         set = function(_, value)
