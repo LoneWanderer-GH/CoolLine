@@ -240,8 +240,8 @@ function CoolLine:SetupOptions()
                     width = {
                         type = "range",
                         name = "Width",
-                        min = 50,
-                        max = 1000,
+                        min = 10,
+                        max = 500,
                         step = 1,
                         get = function() return CoolLine.db.w end,
                         set = function(_, value)
@@ -253,8 +253,8 @@ function CoolLine:SetupOptions()
                     height = {
                         type = "range",
                         name = "Height",
-                        min = 6,
-                        max = 200,
+                        min = 50,
+                        max = 500,
                         step = 1,
                         get = function() return CoolLine.db.h end,
                         set = function(_, value)
