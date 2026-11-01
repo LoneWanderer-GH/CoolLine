@@ -1,10 +1,6 @@
 -- Récupération de l'environnement de l'addon (fourni par WoW au chargement)
-local addonName, addonTable = ...
-if not addonTable.CoolLine then
-    addonTable.CoolLine = {}
-end
-local CoolLine = addonTable.CoolLine
--- local CoolLine = LibStub("AceAddon-3.0"):GetAddon("CoolLine")
+local addonName = ...
+local CoolLine = LibStub("AceAddon-3.0"):GetAddon(addonName).MainFrame
 
 local _G = _G
 
@@ -50,6 +46,24 @@ function CoolLine:GetSpellBaseCooldownCompat(spellID)
     end
     -- print("WTF: GetSpellBaseCooldown not found for spellID", spellID)
     return nil
+end
+
+function CoolLine:GetItemSpellIDCompat(itemID)
+    local getItemSpell = C_Item and C_Item.GetItemSpell or _G.GetItemSpell
+    if not itemID or not getItemSpell then
+        return nil
+    end
+    local _, spellID = getItemSpell(itemID)
+    return spellID
+end
+
+function CoolLine:GetContainerItemIDCompat(bagID, slotID)
+    if C_Container and C_Container.GetContainerItemID then
+        return C_Container.GetContainerItemID(bagID, slotID)
+    end
+    if GetContainerItemID then
+        return GetContainerItemID(bagID, slotID)
+    end
 end
 
 function CoolLine:GetItemNameCompat(itemInfo)
@@ -216,9 +230,9 @@ end
 -- Midnight: Secret-safe spell charge cooldown
 function CoolLine:GetSpellChargeDurationCompat(spellID)
     if C_Spell and C_Spell.GetSpellChargeDuration then
-        return C_Spell.GetSpellChargeDuration(spellID)
+        local duration = C_Spell.GetSpellChargeDuration(spellID)
+        return duration and duration:GetRemainingDuration()
     end
 
     return nil
 end
-

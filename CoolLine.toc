@@ -1,12 +1,7 @@
-## Interface: 11307
+## Interface: 120105
 ## Interface-Retail: 120105
-## Interface-BCC: 20506
-## Interface-WRATH: 30405
-## Interface-MISTS: 50504
-## Interface-CATA: 40402
 ## Interface-Classic: 11509
-## Interface-Forever: 16001
-## X-WoWAddonTooling-Targets: retail, classic, bcc, wrath, cata, mists
+## X-WoWAddonTooling-Targets: retail, classic
 ## Version: @project-version@
 ## Title: |cFF22B14CCoolLine v|r@project-version@
 
@@ -16,19 +11,6 @@
 #@version-classic@
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Classic era)|r modifications by |cff00ffda@project-author@
 #@end-version-classic@
-#@version-bcc@
-## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Burning Crusade)|r modifications by |cff00ffda@project-author@
-#@end-version-bcc@
-#@version-wrath@
-## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (WOTLK)|r modifications by |cff00ffda@project-author@
-#@end-version-wrath@
-#@version-cata@
-## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Cataclysm)|r modifications by |cff00ffda@project-author@
-#@end-version-cata@
-#@version-mists@
-## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Mists of Pandaria)|r modifications by |cff00ffda@project-author@
-#@end-version-mists@
-
 ## Author: TotalPackage, Phanx, |cff00ffda@project-author@|r with contributions from |cFF22B14Ccapoferro
 
 ## X-Curse-Project-ID: 356973
@@ -50,19 +32,17 @@
 Libs\LibStub\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+Libs\Ace3\AceAddon-3.0\AceAddon-3.0.xml
+Libs\Ace3\AceConsole-3.0\AceConsole-3.0.xml
+Libs\Ace3\AceGUI-3.0\AceGUI-3.0.xml
+Libs\Ace3\AceConfig-3.0\AceConfig-3.0.xml
+#@debug@
+Libs\LoggingLib\LoggingLib.xml
+#@end-debug@
 
-# # refacto
-# libs\AceGUI-3.0\AceGUI-3.0.xml
-# libs\AceAddon-3.0\AceAddon-3.0.xml
-# libs\AceConfig-3.0\AceConfig-3.0.xml
-# libs\AceConsole-3.0\AceConsole-3.0.xml
-# libs\AceEvent-3.0\AceEvent-3.0.xml
-# libs\AceLocale-3.0\AceLocale-3.0.xml
-# libs\AceDB-3.0\AceDB-3.0.xml
-# #@debug@
-# libs\LoggingLib\LoggingLib.xml
-# #@end-debug@
-
+CoolLine.lua
 compat.lua
+timeline.lua
+options.lua
 
 core.lua

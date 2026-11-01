@@ -15,7 +15,18 @@ It is the original CoolLine modified to be compatible with an addon I made: [Elv
 [![](http://cf.way2muchnoise.eu/full_356978_downloads.svg)](https://www.curseforge.com/wow/addons/coolline-classic-updated)
 ![](https://github.com/LoneWanderer-GH/CoolLine/actions/workflows/build.yml/badge.svg)
 
-Upcoming features:
+## Blizzard encounter timeline
+
+Retail can optionally route player-spell cooldowns to Blizzard's encounter
+timeline. Pet spellbook cooldowns and item cooldowns can also be routed when
+their spell IDs are available. The Blizzard API exposes one shared timeline; it
+does not let addons create independent instances. The original CoolLine bar and
+the Blizzard timeline can be enabled together or independently in `/coolline`;
+cooldowns without a usable native event stay on CoolLine's bar when it is on.
+
+Use `/coolline` or `/cl` to open settings. `/coolline <spell/item name or ID>`
+toggles an entry in the dedicated cooldown blacklist; `/coolline list` shows
+the current entries.
 
 ![](./docs/img/BlizzardTimeLineIntegration.png)
 
