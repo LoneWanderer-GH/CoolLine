@@ -14,17 +14,20 @@
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Retail)|r modifications by |cff00ffda@project-author@
 #@end-version-retail@
 #@version-classic@
-## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Classic)|r modifications by |cff00ffda@project-author@
+## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Classic era)|r modifications by |cff00ffda@project-author@
 #@end-version-classic@
 #@version-bcc@
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Burning Crusade)|r modifications by |cff00ffda@project-author@
 #@end-version-bcc@
-#@version-wotlk@
+#@version-wrath@
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (WOTLK)|r modifications by |cff00ffda@project-author@
-#@end-version-wotlk@
+#@end-version-wrath@
 #@version-cata@
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Cataclysm)|r modifications by |cff00ffda@project-author@
 #@end-version-cata@
+#@version-mists@
+## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Mists of Pandaria)|r modifications by |cff00ffda@project-author@
+#@end-version-mists@
 
 ## Author: TotalPackage, Phanx, |cff00ffda@project-author@|r with contributions from |cFF22B14Ccapoferro
 
