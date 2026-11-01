@@ -46,3 +46,5 @@ timeline.lua
 options.lua
 
 core.lua
+spellbook.lua
+commands.lua
