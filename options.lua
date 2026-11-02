@@ -96,8 +96,15 @@ function CoolLine:OpenOptions()
     end
 end
 
-function CoolLine:ToggleUnlock()
-    if not self.resizer then
+function CoolLine:SetUnlocked(unlocked)
+    unlocked = not not unlocked
+    local wasUnlocked = self.unlock == true
+    if wasUnlocked == unlocked then
+        self.unlock = wasUnlocked
+        return
+    end
+
+    if unlocked and not self.resizer then
         self:SetResizable(true)
         local wrapperLoaded = self:IsAddonLoadedCompat("ElvUI_CoolLine_Wrapper")
         self:SetMovable(not wrapperLoaded)
@@ -137,16 +144,19 @@ function CoolLine:ToggleUnlock()
         end)
     end
 
-    self.unlock = not self.unlock
+    self.unlock = unlocked
     self:EnableMouse(self.unlock)
     if self.unlock then
         self.resizer:Show()
         self:SetAlpha(self.db.activealpha)
-        print("CoolLine: drag to move; drag the corner to resize")
     else
         self.resizer:Hide()
         self.updatelook()
     end
+end
+
+function CoolLine:ToggleUnlock()
+    self:SetUnlocked(not self.unlock)
 end
 
 function CoolLine:SetupOptions()
@@ -470,9 +480,11 @@ function CoolLine:SetupOptions()
                         order = 5,
                     },
                     unlock = {
-                        type = "execute",
-                        name = "Unlock / resize",
-                        func = function() CoolLine:ToggleUnlock() end,
+                        type = "toggle",
+                        name = "Unlock to move/resize",
+                        desc = "Unlock CoolLine to drag it and use the lower-right corner to resize it. If ElvUI_CoolLine_Wrapper is enabled, use ElvUI's mover to reposition it.",
+                        get = function() return CoolLine.unlock == true end,
+                        set = function(_, value) CoolLine:SetUnlocked(value) end,
                         order = 6,
                     },
                     reset = {

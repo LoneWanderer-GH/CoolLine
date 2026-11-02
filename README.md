@@ -24,9 +24,13 @@ does not let addons create independent instances. The original CoolLine bar and
 the Blizzard timeline can be enabled together or independently in `/coolline`;
 cooldowns without a usable native event stay on CoolLine's bar when it is on.
 
-Use `/coolline` or `/cl` to open settings. `/coolline <spell/item name or ID>`
-toggles an entry in the dedicated cooldown blacklist; `/coolline list` shows
-the current entries.
+Use `/coolline` or `/cl` to open settings. Use `/cl unlock` (or `/cl move`) to
+enable dragging and resizing, and `/cl lock` to finish. `/cl toggle` toggles
+that mode. The same unlock control is available in the Behavior section of the
+options. When `ElvUI_CoolLine_Wrapper` is loaded, use its mover to reposition
+CoolLine; the unlock control still enables resizing. `/coolline <spell/item
+name or ID>` toggles an entry in the dedicated cooldown blacklist;
+`/coolline list` shows the current entries.
 
 ![](./docs/img/BlizzardTimeLineIntegration.png)
 
