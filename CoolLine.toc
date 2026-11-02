@@ -1,6 +1,11 @@
 ## Interface: 120105
 ## Interface-Retail: 120105
 ## Interface-Classic: 11509
+## Interface-bcc: 020506
+## Interface-Forever: 16001
+# ## Interface-Wrath: 30405
+# ## Interface-Cata: 40402
+## Interface-Mists: 50504
 ## X-WoWAddonTooling-Targets: retail, classic
 ## Version: @project-version@
 ## Title: |cFF22B14CCoolLine v|r@project-version@
@@ -11,6 +16,15 @@
 #@version-classic@
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Classic era)|r modifications by |cff00ffda@project-author@
 #@end-version-classic@
+#@version-bcc@
+## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Classic BC)|r modifications by |cff00ffda@project-author@
+#@end-version-bcc@
+#@version-Forever@
+## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Forever)|r modifications by |cff00ffda@project-author@
+#@end-version-Forever@
+#@version-Mists@
+## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Mists of Pandaria)|r modifications by |cff00ffda@project-author@
+#@end-version-Mists@
 ## Author: TotalPackage, Phanx, |cff00ffda@project-author@|r with contributions from |cFF22B14Ccapoferro
 
 ## X-Curse-Project-ID: 356973
