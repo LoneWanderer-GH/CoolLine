@@ -9,5 +9,5 @@ permissions:
 
 jobs:
   publish:
-    uses: LoneWanderer-GH/WoWAddonTooling/.github/workflows/addon-release.yml@v1.0.7
+    uses: LoneWanderer-GH/WoWAddonTooling/.github/workflows/addon-release.yml@v1.0.8
     secrets: inherit
