@@ -41,6 +41,9 @@ local function optionSet(info, value)
         CoolLine.db.w, CoolLine.db.h = CoolLine.db.h, CoolLine.db.w
     end
     CoolLine.db[key] = value
+    if key == "showConfigPreviews" and CoolLine.SetConfigPreviews then
+        CoolLine:SetConfigPreviews(value)
+    end
     if key == "perchar" then
         if value then
             CoolLineCharDB = CoolLineCharDB or CoolLineDB
@@ -97,18 +100,24 @@ function CoolLine:OpenOptions()
 end
 
 function CoolLine:SetUnlocked(unlocked)
-    unlocked = not not unlocked
-    local wasUnlocked = self.unlock == true
+    local wasUnlocked = self.unlock or false
     if wasUnlocked == unlocked then
         self.unlock = wasUnlocked
         return
     end
 
-    if unlocked and not self.resizer then
-        self:SetResizable(true)
+    if unlocked and not self.unlockSetup then
         local wrapperLoaded = self:IsAddonLoadedCompat("ElvUI_CoolLine_Wrapper")
-        self:SetMovable(not wrapperLoaded)
-        if not wrapperLoaded then
+        local canMove = self.SetMovable ~= nil and self.RegisterForDrag ~= nil
+            and self.StartMoving ~= nil and self.StopMovingOrSizing ~= nil
+        self.canDrag = not wrapperLoaded and canMove
+        self.canResize = self.SetResizable ~= nil and self.StartSizing ~= nil
+            and self.StopMovingOrSizing ~= nil
+
+        if self.SetMovable then
+            self:SetMovable(self.canDrag)
+        end
+        if self.canDrag then
             self:RegisterForDrag("LeftButton")
         end
         self:SetScript("OnMouseUp", function(_, button)
@@ -116,7 +125,7 @@ function CoolLine:SetUnlocked(unlocked)
                 self:OpenOptions()
             end
         end)
-        if not wrapperLoaded then
+        if self.canDrag then
             self:SetScript("OnDragStart", function(frame)
                 frame:StartMoving()
             end)
@@ -130,27 +139,39 @@ function CoolLine:SetUnlocked(unlocked)
             end)
         end
 
-        self:SetMinResize(6, 6)
-        self.resizer = CreateFrame("Button", nil, self.border, "UIPanelButtonTemplate")
-        self.resizer:SetSize(8, 8)
-        self.resizer:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 2, -2)
-        self.resizer:SetScript("OnMouseDown", function()
-            self:StartSizing("BOTTOMRIGHT")
-        end)
-        self.resizer:SetScript("OnMouseUp", function()
-            self:StopMovingOrSizing()
-            self.db.w, self.db.h = floor(self:GetWidth() + 0.5), floor(self:GetHeight() + 0.5)
-            self.updatelook()
-        end)
+        if self.canResize then
+            self:SetResizable(true)
+            if self.SetResizeBounds then
+                self:SetResizeBounds(6, 6)
+            elseif self.SetMinResize then
+                self:SetMinResize(6, 6)
+            end
+            self.resizer = CreateFrame("Button", nil, self.border, "UIPanelButtonTemplate")
+            self.resizer:SetSize(8, 8)
+            self.resizer:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 2, -2)
+            self.resizer:SetScript("OnMouseDown", function()
+                self:StartSizing("BOTTOMRIGHT")
+            end)
+            self.resizer:SetScript("OnMouseUp", function()
+                self:StopMovingOrSizing()
+                self.db.w, self.db.h = floor(self:GetWidth() + 0.5), floor(self:GetHeight() + 0.5)
+                self.updatelook()
+            end)
+        end
+        self.unlockSetup = true
     end
 
     self.unlock = unlocked
     self:EnableMouse(self.unlock)
     if self.unlock then
-        self.resizer:Show()
+        if self.resizer then
+            self.resizer:Show()
+        end
         self:SetAlpha(self.db.activealpha)
     else
-        self.resizer:Hide()
+        if self.resizer then
+            self.resizer:Hide()
+        end
         self.updatelook()
     end
 end
@@ -479,13 +500,21 @@ function CoolLine:SetupOptions()
                         set = optionSet,
                         order = 5,
                     },
+                    showConfigPreviews = {
+                        type = "toggle",
+                        name = "Show example cooldowns",
+                        desc = "Display a set of temporary cooldowns with different durations on CoolLine. They are never sent to Blizzard's encounter timeline.",
+                        get = optionGet,
+                        set = optionSet,
+                        order = 6,
+                    },
                     unlock = {
                         type = "toggle",
                         name = "Unlock to move/resize",
                         desc = "Unlock CoolLine to drag it and use the lower-right corner to resize it. If ElvUI_CoolLine_Wrapper is enabled, use ElvUI's mover to reposition it.",
-                        get = function() return CoolLine.unlock == true end,
+                        get = function() return CoolLine.unlock or false end,
                         set = function(_, value) CoolLine:SetUnlocked(value) end,
-                        order = 6,
+                        order = 7,
                     },
                     reset = {
                         type = "execute",
@@ -495,7 +524,7 @@ function CoolLine:SetupOptions()
                             CoolLineCharDB, CoolLineDB = nil, nil
                             ReloadUI()
                         end,
-                        order = 7,
+                        order = 8,
                     },
                 },
             },

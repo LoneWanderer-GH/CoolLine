@@ -161,6 +161,9 @@ function CoolLine:ADDON_LOADED(a1)
     if db.timelineItem == nil then
         db.timelineItem = false
     end
+    if db.showConfigPreviews == nil then
+        db.showConfigPreviews = false
+    end
     block          = db.block
     CoolLine.db    = db
     --@debug@
@@ -352,6 +355,9 @@ function CoolLine:PLAYER_LOGIN()
     --@end-version-retail@
 
     updatelook()
+    if db.showConfigPreviews and CoolLine.SetConfigPreviews then
+        CoolLine:SetConfigPreviews(true)
+    end
     self:SetAlpha((#cooldowns == 0 and db.inactivealpha) or db.activealpha)
     self:RegisterEvent("PLAYER_LEAVING_WORLD")
 end
@@ -415,7 +421,7 @@ local function SetupIcon(frame, position, tthrot, active, fl)
 end
 
 local function IsLegacyCooldown(frame)
-    return db.legacyTimeline ~= false and not frame.timelineEventID
+    return frame.source == "config" or (db.legacyTimeline ~= false and not frame.timelineEventID)
 end
 
 local function OnUpdate(this, a1, ctime, dofl)

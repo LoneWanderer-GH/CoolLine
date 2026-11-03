@@ -31,6 +31,10 @@ options. When `ElvUI_CoolLine_Wrapper` is loaded, use its mover to reposition
 CoolLine; the unlock control still enables resizing. `/coolline <spell/item
 name or ID>` toggles an entry in the dedicated cooldown blacklist;
 `/coolline list` shows the current entries.
+Enable **Show example cooldowns** in the Behavior section of CoolLine's
+options to display four temporary cooldowns with different durations. They
+remain visible until the option is disabled and are never routed to Blizzard's
+encounter timeline.
 
 ![](./docs/img/BlizzardTimeLineIntegration.png)
 
