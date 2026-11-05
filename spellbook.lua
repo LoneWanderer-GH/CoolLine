@@ -2,6 +2,7 @@ local addonName = ...
 local CoolLine = LibStub("AceAddon-3.0"):GetAddon(addonName).MainFrame
 
 local IS_RETAIL_RELEASE = CoolLine.IS_RETAIL_RELEASE
+local HAS_SECRET_VALUE_API = type(_G.issecretvalue) == "function"
 local BOOKTYPE_SPELL = CoolLine.BOOKTYPE_SPELL
 local BOOKTYPE_PET = CoolLine.BOOKTYPE_PET
 local DEFAULT_RETAIL_GCD_DURATION_S = CoolLine.DEFAULT_RETAIL_GCD_DURATION_S
@@ -173,12 +174,12 @@ do
         CoolLine:SyncTimelineEvent(frame)
     end
 
-    local function CheckSpellBookLegacy(btype)
+    local function CheckSpellBookWithLegacyAPI(btype, checkSecretValues)
         local source = btype == BOOKTYPE_SPELL and "player" or "pet"
         for id, name in pairs(spells[btype]) do
             local start, duration, enable = CoolLine:GetSpellCooldownCompat(id)
-            if CoolLine:IsSecretValueCompat(start) or CoolLine:IsSecretValueCompat(duration)
-                or CoolLine:IsSecretValueCompat(enable) then
+            if checkSecretValues and (CoolLine:IsSecretValueCompat(start)
+                or CoolLine:IsSecretValueCompat(duration) or CoolLine:IsSecretValueCompat(enable)) then
                 
                 CoolLine:LogCooldownDebug("secret-legacy:" .. source .. ":" .. tostring(id),
                     "Ignored " .. name .. " cooldown: start, duration, or enabled state is secret (ID "
@@ -214,8 +215,9 @@ do
 
         for id, name in pairs(chargespells[btype]) do
             local currentCharges, maxCharges, cooldownStart, cooldownDuration = CoolLine:GetSpellChargesCompat(id)
-            if CoolLine:IsSecretValueCompat(currentCharges) or CoolLine:IsSecretValueCompat(maxCharges)
-                or CoolLine:IsSecretValueCompat(cooldownStart) or CoolLine:IsSecretValueCompat(cooldownDuration) then
+            if checkSecretValues and (CoolLine:IsSecretValueCompat(currentCharges)
+                or CoolLine:IsSecretValueCompat(maxCharges) or CoolLine:IsSecretValueCompat(cooldownStart)
+                or CoolLine:IsSecretValueCompat(cooldownDuration)) then
                 CoolLine:LogCooldownDebug("secret-legacy-charge:" .. source .. ":" .. tostring(id),
                     "Ignored " .. name .. " charge cooldown: charge count or cooldown timing is secret (ID "
                         .. tostring(id) .. ", source " .. source .. ").")
@@ -339,12 +341,25 @@ do
         end
     end
 
+    local function CheckSpellBookClassic(btype)
+        CheckSpellBookWithLegacyAPI(btype, false)
+    end
+
+    local function CheckSpellBookForever(btype)
+        CheckSpellBookWithLegacyAPI(btype, true)
+    end
+
+    local checkSpellBookByClient = {
+        retail = CheckSpellBookRetail,
+        forever = CheckSpellBookForever,
+        classic = CheckSpellBookClassic,
+    }
+    local client = IS_RETAIL_RELEASE and "retail"
+        or HAS_SECRET_VALUE_API and "forever"
+        or "classic"
+
     local function CheckSpellBook(btype)
-        if IS_RETAIL_RELEASE then
-            CheckSpellBookRetail(btype)
-        else
-            CheckSpellBookLegacy(btype)
-        end
+        checkSpellBookByClient[client](btype)
     end
 
     spellThrottle:SetScript("OnUpdate", function(this, delta)
