@@ -110,9 +110,9 @@ local function ShowOptions(input)
     elseif input == "debug" then
         CoolLine.cooldownDebugEnabled = not CoolLine.cooldownDebugEnabled
         CoolLine.cooldownDebugMessages = {}
-        --@debug@
+        
         CoolLineApp:SetCooldownDebugEnabled(CoolLine.cooldownDebugEnabled)
-        --@end-debug@
+        
         CoolLineApp:Print(CoolLine.cooldownDebugEnabled
             and "CoolLine: cooldown diagnostics enabled; rescanning the spellbook."
             or "CoolLine: cooldown diagnostics disabled.")

@@ -3,7 +3,7 @@ local CoolLineApp = LibStub("AceAddon-3.0"):GetAddon(addonName)
 local CoolLine = CoolLineApp.MainFrame
 local EVENT_EXPIRATION_TOLERANCE = 0.5
 
---@debug@
+
 local function logTimelineStatus(frame, status)
     local spellID = tostring(frame.spellID or frame.name or "unknown")
     local message = "Blizzard timeline: " .. tostring(frame.name or "Unknown spell")
@@ -37,7 +37,7 @@ local function getTimelinePlacement(timeline, eventID)
     return "track " .. trackName .. ", minimum intro "
         .. tostring(trackInfo.minimumEventIntroDuration) .. " s"
 end
---@end-debug@
+
 
 local function cancelEvent(frame)
     local timeline = C_EncounterTimeline
@@ -103,9 +103,9 @@ function CoolLine:SyncTimelineEvent(frame)
 
     if reason then
         cancelEvent(frame)
-        --@debug@
+        
         logTimelineStatus(frame, "not sent: " .. reason)
-        --@end-debug@
+        
         return
     end
 
@@ -114,24 +114,24 @@ function CoolLine:SyncTimelineEvent(frame)
     if frame.timelineEventID and frame.timelineEventSpellID == frame.spellID then
         if frame.timelineEventEndTime
             and now < frame.timelineEventEndTime - EVENT_EXPIRATION_TOLERANCE then
-            --@debug@
+            
             logTimelineStatus(frame, "already registered (event ID "
                 .. tostring(frame.timelineEventID) .. ")")
-            --@end-debug@
+            
             return
         end
         -- Blizzard events expire on their own; discard the stale local handle before re-adding.
-        --@debug@
+        
         logTimelineStatus(frame, "previous event expired; replacing local event handle")
-        --@end-debug@
+        
     end
 
     cancelEvent(frame)
     local severity = Enum and Enum.EncounterEventSeverity and Enum.EncounterEventSeverity.Medium
     if not severity then
-        --@debug@
+        
         logTimelineStatus(frame, "not sent: Blizzard event severity is unavailable")
-        --@end-debug@
+        
         return
     end
 
@@ -149,15 +149,15 @@ function CoolLine:SyncTimelineEvent(frame)
         frame.timelineEventID = eventID
         frame.timelineEventSpellID = frame.spellID
         frame.timelineEventEndTime = eventEndTime
-        --@debug@
+        
         logTimelineStatus(frame, "accepted by Blizzard (event ID " .. tostring(eventID)
             .. "; " .. getTimelinePlacement(timeline, eventID) .. ")")
         CoolLineApp:Trace("Timeline", "Routed cooldown to Blizzard timeline")
-        --@end-debug@
+        
     else
-        --@debug@
+        
         logTimelineStatus(frame, "not accepted by Blizzard (returned " .. tostring(eventID) .. ")")
-        --@end-debug@
+        
     end
 end
 

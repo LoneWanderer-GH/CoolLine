@@ -82,9 +82,9 @@ function CoolLine:SetBlockedFilter(name, blocked)
     else
         self.db.block[name] = nil
     end
-    --@debug@
+    
     CoolLineApp:Debug("Options", "Updated cooldown blacklist")
-    --@end-debug@
+    
     refresh(true)
 end
 
@@ -95,10 +95,10 @@ function CoolLine:OpenOptions()
         InterfaceOptionsFrame_OpenToCategory(blizzardOptionsFrame)
         InterfaceOptionsFrame_OpenToCategory(blizzardOptionsFrame)
     else
-        --@debug@
+        
         CoolLine:LogCooldownDebug("options:category-unavailable",
             "Blizzard options category is unavailable.")
-        --@end-debug@
+        
     end
 end
 

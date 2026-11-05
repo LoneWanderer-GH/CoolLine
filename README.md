@@ -31,6 +31,13 @@ options. When `ElvUI_CoolLine_Wrapper` is loaded, use its mover to reposition
 CoolLine; the unlock control still enables resizing. `/coolline <spell/item
 name or ID>` toggles an entry in the dedicated cooldown blacklist;
 `/coolline list` shows the current entries.
+Use `/cl debug` to toggle in-game cooldown diagnostics. It reports spells
+filtered by base cooldown, charge cooldowns found or missing recharge timing,
+active cooldowns found or blacklisted, and secret durations that prevent
+CoolLine from reading a cooldown. If the charge-duration API returns no value
+or a value below the display threshold while charges are missing, CoolLine
+falls back to readable charge timing from the charge-info API. Secret values
+are never printed.
 Enable **Show example cooldowns** in the Behavior section of CoolLine's
 options to display four temporary cooldowns with different durations. They
 remain visible until the option is disabled and are never routed to Blizzard's
