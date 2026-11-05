@@ -79,9 +79,10 @@ local function ShowOptions(input)
         CoolLine:OpenOptions()
     elseif input == "help" or input == "h" then
         local command = Color("/cl", "00b3ff")
-        local option = Color("unlock||move||resize||lock||toggle", "ffd100")
+        local option = Color("unlock||move||resize||lock||toggle||debug", "ffd100")
         CoolLineApp:Print(command .. " opens options.")
         CoolLineApp:Print(command .. " " .. option .. " controls moving/resizing; " .. command
+            .. " debug toggles cooldown diagnostics; " .. command
             .. " <spell or item> toggles its blacklist entry.")
         CoolLineApp:Print(Color("Report compatibility issues: ", "bbbbbb")
             .. Color("https://github.com/LoneWanderer-GH/CoolLine/issues", "00b3ff"))
@@ -106,6 +107,19 @@ local function ShowOptions(input)
     elseif input == "toggle" then
         CoolLine:ToggleUnlock()
         CoolLineApp:Print(CoolLine.unlock and "Unlocked." or "Locked.")
+    elseif input == "debug" then
+        CoolLine.cooldownDebugEnabled = not CoolLine.cooldownDebugEnabled
+        CoolLine.cooldownDebugMessages = {}
+        --@debug@
+        CoolLineApp:SetCooldownDebugEnabled(CoolLine.cooldownDebugEnabled)
+        --@end-debug@
+        CoolLineApp:Print(CoolLine.cooldownDebugEnabled
+            and "CoolLine: cooldown diagnostics enabled; rescanning the spellbook."
+            or "CoolLine: cooldown diagnostics disabled.")
+        if CoolLine.cooldownDebugEnabled then
+            CoolLine:SPELLS_CHANGED()
+            CoolLine:SPELL_UPDATE_COOLDOWN()
+        end
     elseif input == "list" or input == "l" then
         CoolLineApp:Print("Blacklisted cooldowns:")
         for name in pairs(CoolLine.db.block) do

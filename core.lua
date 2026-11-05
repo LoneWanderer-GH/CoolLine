@@ -30,6 +30,23 @@ local db, block
 function CoolLine:IsBlocked(name, id)
     return (name and block[name]) or (id and (block[id] or block[tostring(id)]))
 end
+--@debug@
+function CoolLine:LogCooldownDebug(key, message)
+    if not self.cooldownDebugEnabled then
+        return
+    end
+    self.cooldownDebugMessages = self.cooldownDebugMessages or {}
+    if self.cooldownDebugMessages[key] == message then
+        return
+    end
+    self.cooldownDebugMessages[key] = message
+    local category = key:match("^timeline:") and "Timeline"
+        or key:match("^options:") and "Options"
+        or (key:match("^create:") or key:match("^config:")) and "Core"
+        or "Spellbook"
+    CoolLineApp:Debug(category, message)
+end
+--@end-debug@
 local backdrop                                              = { edgeSize = 16 } -- Left Unchanged
 local section, iconsize                                     = 0, 0
 local tick0, tick1, tick3, tick10, tick30, tick120, tick300
@@ -89,7 +106,10 @@ function CoolLine:SetConfig(w, h, x, y, font, fontsize, inactivealpha, activealp
         db.inactivealpha = inactivealpha or db.inactivealpha
     else
         -- ?
-        print("CoolLine SetConfig called but no db loaded")
+        --@debug@
+        CoolLine:LogCooldownDebug("config:missing-db",
+            "SetConfig was called before the configuration database was loaded.")
+        --@end-debug@
     end
     self.updatelook(updateOption)
 end
@@ -524,7 +544,13 @@ CoolLine.RefreshCooldownDisplay = RefreshCooldownDisplay
 
 local function NewCooldownClassic(name, icon, endtime, isplayer, spellID, source)
     if not name or not icon or not endtime then
-        print("CoolLine: NewCooldownClassic called with missing parameters:", name, icon, endtime, isplayer, spellID)
+        --@debug@
+        CoolLine:LogCooldownDebug("create:classic-invalid:" .. tostring(spellID or name),
+            "NewCooldownClassic received missing parameters (name: " .. tostring(name)
+                .. ", icon: " .. tostring(icon) .. ", end time: " .. tostring(endtime)
+                .. ", is player: " .. tostring(isplayer) .. ", spell ID: "
+                .. tostring(spellID) .. ").")
+        --@end-debug@
         return
     end
     -- print("CoolLine: NewCooldownClassic called with parameters:", name, icon, endtime, isplayer, spellID)
@@ -573,15 +599,31 @@ end
 
 local function NewCooldownRetail(name, icon, remaining_duration, isplayer, spellID, source)
     --name, id, duration, btype == BOOKTYPE_SPELL
+    source = source or (isplayer and "player") or (spellID and "pet") or "item"
     if CoolLine:IsSecretValueCompat(remaining_duration) then
+        --@debug@
+        CoolLine:LogCooldownDebug("create:" .. source .. ":" .. tostring(spellID or name),
+            "Skipped " .. source .. " cooldown with a secret remaining duration (spell ID: "
+                .. tostring(spellID or "unknown") .. ").")
+        --@end-debug@
         return
     end
+    --@debug@
+    CoolLine:LogCooldownDebug("create:" .. source .. ":" .. tostring(spellID or name),
+        "Received a readable " .. source .. " cooldown (spell ID: "
+            .. tostring(spellID or "unknown") .. ").")
+    --@end-debug@
     if not name or not icon or not remaining_duration then
-        print("CoolLine: NewCooldownRetail called with missing parameters:", name, icon, remaining_duration, isplayer, spellID)
+        --@debug@
+        CoolLine:LogCooldownDebug("create:invalid:" .. tostring(spellID or name),
+            "NewCooldownRetail received missing parameters (name: " .. tostring(name)
+                .. ", icon: " .. tostring(icon) .. ", remaining duration: "
+                .. tostring(remaining_duration) .. ", is player: " .. tostring(isplayer)
+                .. ", spell ID: " .. tostring(spellID) .. ").")
+        --@end-debug@
         return
     end
     -- print("CoolLine: NewCooldownRetail called with parameters:", name, icon, endtime, isplayer, spellID)
-    source = source or (isplayer and "player") or (spellID and "pet") or "item"
     local f
     for index, frame in pairs(cooldowns) do
         if frame.name == name and frame.source == source then
@@ -593,8 +635,15 @@ local function NewCooldownRetail(name, icon, remaining_duration, isplayer, spell
     end
     local previousRemaining = f and f.remaining_duration
     local previousSample = f and f.cooldownSampleTime
-    if previousRemaining and previousSample and remaining_duration < previousRemaining - (GetTime() - previousSample) - 0.1 then
-        CoolLine:CancelTimelineEvent(f)
+    if previousRemaining and previousSample then
+        local expectedRemaining = previousRemaining - (GetTime() - previousSample)
+        if remaining_duration > expectedRemaining + 2 then
+            --@debug@
+            CoolLine:LogCooldownDebug("timeline-restart:" .. source .. ":" .. tostring(spellID or name),
+                "Cooldown for " .. tostring(name) .. " restarted or was extended; replacing its Blizzard timeline event.")
+            --@end-debug@
+            CoolLine:CancelTimelineEvent(f)
+        end
     end
     if not f then
         f = f or tremove(frames)

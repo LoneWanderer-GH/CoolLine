@@ -18,3 +18,15 @@ externals:
    Libs/LoggingLib:
      url: https://github.com/LoneWanderer-GH/LoggingLib.git
      tag: master
+
+optional-dependencies:
+  # https://www.curseforge.com/wow/addons/debuglog
+  - debuglog
+#  - https://www.curseforge.com/wow/addons/logginglib
+  - logginglib
+
+tools-used:
+  # https://www.curseforge.com/wow/addons/debuglog
+  - debuglog
+  - logginglib
+#  - https://www.curseforge.com/wow/addons/logginglib

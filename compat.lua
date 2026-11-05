@@ -143,6 +143,23 @@ function CoolLine:GetSpellInfoCompat(spellID)
     -- return nil
 end
 
+function CoolLine:GetSpellTextureCompat(spellID)
+    if C_Spell and C_Spell.GetSpellTexture then
+        local texture = C_Spell.GetSpellTexture(spellID)
+        if texture then
+            return texture
+        end
+    end
+    if GetSpellTexture then
+        local texture = GetSpellTexture(spellID)
+        if texture then
+            return texture
+        end
+    end
+    local _, _, texture = self:GetSpellInfoCompat(spellID)
+    return texture
+end
+
 function CoolLine:GetSpellBookItemNameCompat(index, bookType)
     if _G.GetSpellBookItemName then
         return _G.GetSpellBookItemName(index, bookType)

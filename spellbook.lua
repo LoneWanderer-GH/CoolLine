@@ -9,6 +9,7 @@ local MINIMUM_COOLDOWN_DURATION_MS = CoolLine.MINIMUM_COOLDOWN_DURATION_MS
 local spells = CoolLine.spells
 local chargespells = CoolLine.chargespells
 local cooldowns = CoolLine.cooldowns
+local GetTime = GetTime
 local ClearCooldown = function(...)
     return CoolLine.ClearCooldown(...)
 end
@@ -40,12 +41,46 @@ do
                 spellName = resolvedName or spellName
 
                 local _, maxCharges = CoolLine:GetSpellChargesCompat(spellID)
-                if maxCharges and maxCharges > 0 then
+                if CoolLine:IsSecretValueCompat(maxCharges) then
                     chargespells[btype][spellID] = spellName or tostring(spellID)
+                    --@debug@
+                    CoolLine:LogCooldownDebug("cache:" .. btype .. ":" .. tostring(spellID),
+                        "Tracking charge cooldown for " .. (spellName or tostring(spellID))
+                            .. "; maximum charge count is secret (ID " .. tostring(spellID) .. ").")
+                    --@end-debug@
+                elseif maxCharges and maxCharges > 0 then
+                    chargespells[btype][spellID] = spellName or tostring(spellID)
+                    --@debug@
+                    CoolLine:LogCooldownDebug("cache:" .. btype .. ":" .. tostring(spellID),
+                        "Tracking charge cooldown for " .. (spellName or tostring(spellID))
+                            .. " (ID " .. tostring(spellID) .. ", max charges "
+                            .. tostring(maxCharges) .. ").")
+                    --@end-debug@
                 else
                     local cooldown = CoolLine:GetSpellBaseCooldownCompat(spellID)
-                    if cooldown == nil or cooldown > MINIMUM_COOLDOWN_DURATION_MS then
+                    if CoolLine:IsSecretValueCompat(cooldown) then
                         spells[btype][spellID] = spellName or tostring(spellID)
+                        --@debug@
+                        CoolLine:LogCooldownDebug("cache:" .. btype .. ":" .. tostring(spellID),
+                            "Kept " .. (spellName or tostring(spellID))
+                                .. " in the cooldown scan: base cooldown is secret (ID "
+                                .. tostring(spellID) .. ").")
+                        --@end-debug@
+                    elseif cooldown == nil or cooldown > MINIMUM_COOLDOWN_DURATION_MS then
+                        spells[btype][spellID] = spellName or tostring(spellID)
+                        --@debug@
+                        CoolLine:LogCooldownDebug("cache:" .. btype .. ":" .. tostring(spellID),
+                            "Tracking " .. (spellName or tostring(spellID))
+                                .. " (ID " .. tostring(spellID) .. "); base cooldown "
+                                .. (cooldown == nil and "unknown." or tostring(cooldown) .. " ms."))
+                        --@end-debug@
+                    else
+                        --@debug@
+                        CoolLine:LogCooldownDebug("cache:" .. btype .. ":" .. tostring(spellID),
+                            "Skipped " .. (spellName or tostring(spellID))
+                                .. " from cooldown scan: base cooldown is "
+                                .. tostring(cooldown) .. " ms (ID " .. tostring(spellID) .. ").")
+                        --@end-debug@
                     end
                 end
             end
@@ -184,7 +219,26 @@ do
         local source = btype == BOOKTYPE_SPELL and "player" or "pet"
         for id, name in pairs(spells[btype]) do
             local remaining = CoolLine:GetSpellCooldownDurationCompat(id)
-            if not CoolLine:IsSecretValueCompat(remaining) then
+            if CoolLine:IsSecretValueCompat(remaining) then
+                --@debug@
+                CoolLine:LogCooldownDebug("secret:" .. source .. ":" .. tostring(id),
+                    "Ignored " .. name .. " cooldown: remaining duration is secret (ID "
+                        .. tostring(id) .. ", source " .. source .. ").")
+                --@end-debug@
+            else
+                if remaining and remaining > DEFAULT_RETAIL_GCD_DURATION_S then
+                    if CoolLine:IsBlocked(name, id) then
+                        --@debug@
+                        CoolLine:LogCooldownDebug("blocked:" .. source .. ":" .. tostring(id),
+                            "Found cooldown for blacklisted " .. name .. " (ID " .. tostring(id) .. ").")
+                        --@end-debug@
+                    else
+                        --@debug@
+                        CoolLine:LogCooldownDebug("active:" .. source .. ":" .. tostring(id),
+                            "Found active cooldown for " .. name .. " (ID " .. tostring(id) .. ").")
+                        --@end-debug@
+                    end
+                end
                 if remaining and remaining > DEFAULT_RETAIL_GCD_DURATION_S and not CoolLine:IsBlocked(name, id) then
                     local _, _, texture = CoolLine:GetSpellInfoCompat(id)
                     NewCooldownRetail(name, texture, remaining, btype == BOOKTYPE_SPELL, id, source)
@@ -196,7 +250,70 @@ do
 
         for id, name in pairs(chargespells[btype]) do
             local remaining = CoolLine:GetSpellChargeDurationCompat(id)
-            if not CoolLine:IsSecretValueCompat(remaining) then
+            local durationSource = "charge-duration API"
+            local currentCharges, maxCharges, cooldownStart, cooldownDuration =
+                CoolLine:GetSpellChargesCompat(id)
+            local chargeInfoSecret = CoolLine:IsSecretValueCompat(currentCharges)
+                or CoolLine:IsSecretValueCompat(maxCharges)
+                or CoolLine:IsSecretValueCompat(cooldownStart)
+                or CoolLine:IsSecretValueCompat(cooldownDuration)
+            if chargeInfoSecret then
+                --@debug@
+                CoolLine:LogCooldownDebug("secret-charge-info:" .. source .. ":" .. tostring(id),
+                    "Could not read charge count or cooldown timing for " .. name
+                        .. " (ID " .. tostring(id) .. ").")
+                --@end-debug@
+            else
+                --@debug@
+                CoolLine:LogCooldownDebug("charge-state:" .. source .. ":" .. tostring(id),
+                    name .. " charge state (ID " .. tostring(id) .. "): "
+                        .. tostring(currentCharges) .. "/" .. tostring(maxCharges)
+                        .. " charges; cooldown start " .. tostring(cooldownStart)
+                        .. ", duration " .. tostring(cooldownDuration) .. " s.")
+                --@end-debug@
+                if not CoolLine:IsSecretValueCompat(remaining)
+                    and (remaining == nil or remaining <= DEFAULT_RETAIL_GCD_DURATION_S)
+                    and currentCharges and maxCharges and currentCharges < maxCharges
+                    and cooldownStart and cooldownDuration and cooldownStart > 0 and cooldownDuration > 0 then
+                    local chargeRemaining = cooldownStart + cooldownDuration - GetTime()
+                    if chargeRemaining > DEFAULT_RETAIL_GCD_DURATION_S then
+                        remaining = chargeRemaining
+                        durationSource = "charge-info fallback"
+                        --@debug@
+                        CoolLine:LogCooldownDebug("charge-fallback:" .. source .. ":" .. tostring(id),
+                            "Using charge-info fallback for " .. name .. " (ID " .. tostring(id)
+                                .. ", " .. tostring(currentCharges) .. "/" .. tostring(maxCharges) .. " charges).")
+                        --@end-debug@
+                    end
+                end
+            end
+            if CoolLine:IsSecretValueCompat(remaining) then
+                --@debug@
+                CoolLine:LogCooldownDebug("secret-charge:" .. source .. ":" .. tostring(id),
+                    "Ignored " .. name .. " charge cooldown: remaining duration is secret (ID "
+                        .. tostring(id) .. ", source " .. source .. ").")
+                --@end-debug@
+            else
+                if remaining and remaining > DEFAULT_RETAIL_GCD_DURATION_S then
+                    local blocked = CoolLine:IsBlocked(name, id)
+                    --@debug@
+                    CoolLine:LogCooldownDebug((blocked and "blocked-charge:" or "active-charge:")
+                            .. source .. ":" .. tostring(id),
+                        (blocked and "Found cooldown for blacklisted " or "Found active charge cooldown for ")
+                            .. name .. " (ID " .. tostring(id) .. ", via " .. durationSource .. ").")
+                    --@end-debug@
+                elseif remaining then
+                    --@debug@
+                    CoolLine:LogCooldownDebug("short-charge:" .. source .. ":" .. tostring(id),
+                        "Charge cooldown for " .. name .. " is below the display threshold (ID "
+                            .. tostring(id) .. ", remaining " .. tostring(remaining) .. " s).")
+                    --@end-debug@
+                else
+                    --@debug@
+                    CoolLine:LogCooldownDebug("missing-charge:" .. source .. ":" .. tostring(id),
+                        "No readable charge cooldown for " .. name .. " (ID " .. tostring(id) .. ").")
+                    --@end-debug@
+                end
                 if remaining and remaining > DEFAULT_RETAIL_GCD_DURATION_S and not CoolLine:IsBlocked(name, id) then
                     local _, _, texture = CoolLine:GetSpellInfoCompat(id)
                     NewCooldownRetail(name, texture, remaining, btype == BOOKTYPE_SPELL, id, source)

@@ -8,10 +8,13 @@
 ## Interface-Mists: 50504
 # Interface: 120105, 11509, 20506, 16001, 30405, 40402, 50504
 ## X-WoWAddonTooling-Targets: retail, classic, bcc, mists, forever
+## X-Category: Cooldowns
 ## Version: @project-version@
 ## Title: |cFF22B14CCoolLine v|r@project-version@
 
 #@version-retail@
+## IconTexture: Interface\Icons\INV_Misc_PocketWatch_01
+## Category: Cooldowns
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Retail)|r modifications by |cff00ffda@project-author@
 #@end-version-retail@
 #@version-classic@
@@ -37,10 +40,10 @@
 ## SavedVariables: CoolLineDB
 ## SavedVariablesPerCharacter: CoolLineCharDB
 
-## OptionalDeps: LibSharedMedia-3.0
+## OptionalDeps: LibSharedMedia-3.0, _DebugLog
 
 #@debug@
-## OptionalDeps: _DebugLog
+# ## OptionalDeps: 
 #@end-debug@
 
 ## LoadManagers: AddonLoader

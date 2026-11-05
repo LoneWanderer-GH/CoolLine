@@ -10,9 +10,10 @@ local LoggingLib = LibStub("LoggingLib-0.1", true)
 if LoggingLib then
     LoggingLib:Embed(CoolLineApp)
 else
-    print("CoolLine: LoggingLib-0.1 is missing; debug logging is disabled.")
+    CoolLineApp:Print("LoggingLib-0.1 is missing; debug logging is disabled.")
     CoolLineApp.Debug = function() end
     CoolLineApp.Trace = function() end
+    CoolLineApp.SetCooldownDebugEnabled = function() end
 end
 --@end-debug@
 
@@ -20,14 +21,19 @@ local CoolLine = CreateFrame("Frame", "CoolLine", UIParent)
 CoolLine.MainFrame = CoolLine
 CoolLineApp.MainFrame = CoolLine
 
+--@debug@
 function CoolLineApp:OnInitialize()
-    --@debug@
     if LoggingLib then
         self:InitializeLogging(addonName, nil, {
             Core = "|r",
+            Spellbook = "|r",
             Timeline = "|r",
             Options = "|r",
-        }, LoggingLib.TRACE)
+        }, LoggingLib.INACTIVE)
     end
-    --@end-debug@
 end
+
+function CoolLineApp:SetCooldownDebugEnabled(enabled)
+    self:SetLogLevel(enabled and LoggingLib.TRACE or LoggingLib.INACTIVE)
+end
+--@end-debug@

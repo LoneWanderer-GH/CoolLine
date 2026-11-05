@@ -95,7 +95,10 @@ function CoolLine:OpenOptions()
         InterfaceOptionsFrame_OpenToCategory(blizzardOptionsFrame)
         InterfaceOptionsFrame_OpenToCategory(blizzardOptionsFrame)
     else
-        print("CoolLine: Blizzard options category is unavailable.")
+        --@debug@
+        CoolLine:LogCooldownDebug("options:category-unavailable",
+            "Blizzard options category is unavailable.")
+        --@end-debug@
     end
 end
 
