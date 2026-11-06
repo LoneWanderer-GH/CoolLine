@@ -24,6 +24,8 @@
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Burning Crusade Classic)|r modifications by |cff00ffda@project-author@
 #@end-version-bcc@
 #@version-Forever@
+## IconTexture: Interface\Icons\INV_Misc_PocketWatch_01
+## Category: Cooldowns
 ## Notes: Shows cooldowns on a single bar. |cff00b3ff v@project-version@ (Forever)|r modifications by |cff00ffda@project-author@
 #@end-version-Forever@
 #@version-Mists@

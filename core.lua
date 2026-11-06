@@ -256,7 +256,8 @@ function CoolLine:ADDON_LOADED(a1)
         self:SetWidth(db.w or 130)
         self:SetHeight(db.h or 18)
 
-        if option ~= NO_RELOCATE then
+        -- Keep the initial anchor until ElvUI has successfully created its mover.
+        if option ~= NO_RELOCATE and not self.ElvUI_CoolLine_WrapperMoverCreated then
             self:SetPoint("CENTER", UIParent, "CENTER", db.x or 0, db.y or -240)
         end
 
@@ -294,8 +295,8 @@ function CoolLine:ADDON_LOADED(a1)
         tick3    = createfs(tick3, "3", section * 2)
         tick10   = createfs(tick10, "10", section * 3)
         tick30   = createfs(tick30, "30", section * 4)
-        tick120  = createfs(tick120, "2m", section * 5)
-        tick300  = createfs(tick300, "6m", section * 6, "RIGHT")
+        tick120  = createfs(tick120, "2 m", section * 5)
+        tick300  = createfs(tick300, "6 m", section * 6, "RIGHT")
 
         if not self.cb and (not smed:IsValid("font", db.font) or not smed:IsValid("border", db.border) or not smed:IsValid("statusbar", db.statusbar)) then
             smed.RegisterCallback(self, "LibSharedMedia_Registered", updatelook)
