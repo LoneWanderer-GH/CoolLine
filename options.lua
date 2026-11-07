@@ -110,10 +110,10 @@ function CoolLine:SetUnlocked(unlocked)
     end
 
     if unlocked and not self.unlockSetup then
-        local wrapperLoaded = self:IsAddonLoadedCompat("ElvUI_CoolLine_Wrapper")
+        local elvuiLoaded = self:IsAddonLoadedCompat("ElvUI")
         local canMove = self.SetMovable ~= nil and self.RegisterForDrag ~= nil
             and self.StartMoving ~= nil and self.StopMovingOrSizing ~= nil
-        self.canDrag = not wrapperLoaded and canMove
+        self.canDrag = not elvuiLoaded and canMove
         self.canResize = self.SetResizable ~= nil and self.StartSizing ~= nil
             and self.StopMovingOrSizing ~= nil
 
@@ -514,7 +514,7 @@ function CoolLine:SetupOptions()
                     unlock = {
                         type = "toggle",
                         name = "Unlock to move/resize",
-                        desc = "Unlock CoolLine to drag it and use the lower-right corner to resize it. If ElvUI_CoolLine_Wrapper is enabled, use ElvUI's mover to reposition it.",
+                        desc = "Unlock CoolLine to drag it and use the lower-right corner to resize it. When ElvUI is loaded, move CoolLine using ElvUI's CoolLine mover.",
                         get = function() return CoolLine.unlock or false end,
                         set = function(_, value) CoolLine:SetUnlocked(value) end,
                         order = 7,

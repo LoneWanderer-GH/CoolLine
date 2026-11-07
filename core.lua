@@ -61,9 +61,6 @@ CoolLine.spells, CoolLine.chargespells                      = spells, chargespel
 CoolLine.frames, CoolLine.cooldowns, CoolLine.specialspells = frames, cooldowns, specialspells
 CoolLine.BOOKTYPE_SPELL, CoolLine.BOOKTYPE_PET = BOOKTYPE_SPELL, BOOKTYPE_PET
 
-local NO_RELOCATE                                           = "NO_RELOCATE"
-CoolLine.NO_RELOCATE                                        = NO_RELOCATE
-
 local MINIMUM_COOLDOWN_DURATION_MS                          = 2499
 local DEFAULT_RETAIL_GCD_DURATION_S                         = 1.5 -- 0.749
 local DEFAULT_RETAIL_MAX_DURATION_S                         = 3601
@@ -88,34 +85,6 @@ end
 
 local function SetValueVR(this, v, just)
     this:SetPoint(just or "CENTER", CoolLine, "BOTTOM", 0, db.h - v)
-end
-
---------------------------------
--- For 3rd party addons such as ElvUI
-function CoolLine:SetConfig(w, h, x, y, font, fontsize, inactivealpha, activealpha, statusbar, updateOption)
-    --------------------------------
-    if db then
-        db.w             = w or db.w
-        db.h             = h or db.h
-        -- db.x             = x         or db.x
-        -- db.y             = y         or db.y
-        db.font          = font or db.font
-        db.fontsize      = fontsize or db.fontsize
-        db.statusbar     = statusbar or db.statusbar
-        db.activealpha   = activealpha or db.activealpha
-        db.inactivealpha = inactivealpha or db.inactivealpha
-    else
-        -- ?
-        
-        CoolLine:LogCooldownDebug("config:missing-db",
-            "SetConfig was called before the configuration database was loaded.")
-        
-    end
-    self.updatelook(updateOption)
-end
-
-function CoolLine:getConfig()
-    return db.w, db.h, db.x, db.y, db.font, db.fontsize, db.inactivealpha, db.activealpha, db.statusbar
 end
 
 CoolLine:RegisterEvent("ADDON_LOADED")
@@ -252,12 +221,12 @@ function CoolLine:ADDON_LOADED(a1)
         return fs
     end
 
-    updatelook          = function(option)
+    updatelook          = function()
         self:SetWidth(db.w or 130)
         self:SetHeight(db.h or 18)
 
-        -- Keep the initial anchor until ElvUI has successfully created its mover.
-        if option ~= NO_RELOCATE and not self.ElvUI_CoolLine_WrapperMoverCreated then
+        if not self.ElvUIMoverCreated then
+            self:ClearAllPoints()
             self:SetPoint("CENTER", UIParent, "CENTER", db.x or 0, db.y or -240)
         end
 

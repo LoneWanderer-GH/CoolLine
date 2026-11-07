@@ -42,7 +42,7 @@
 ## SavedVariables: CoolLineDB
 ## SavedVariablesPerCharacter: CoolLineCharDB
 
-## OptionalDeps: LibSharedMedia-3.0, _DebugLog
+## OptionalDeps: LibSharedMedia-3.0, _DebugLog, ElvUI
 
 #@debug@
 # ## OptionalDeps: 
@@ -68,5 +68,6 @@ timeline.lua
 options.lua
 
 core.lua
+elvui.lua
 spellbook.lua
 commands.lua

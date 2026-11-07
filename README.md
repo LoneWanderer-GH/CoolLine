@@ -1,4 +1,4 @@
-# CoolLine (for retail, classic and ElvUI_CoolLine_Wrapper compatible)
+# CoolLine (for Retail and Classic)
 
 [![](http://cf.way2muchnoise.eu/title/356973.svg)](https://www.curseforge.com/wow/addons/coolline-classic-updated)
 [![](http://cf.way2muchnoise.eu/versions/356973.svg)](https://www.curseforge.com/wow/addons/coolline-classic-updated)
@@ -8,12 +8,6 @@
 Shows cooldowns on a single bar for World of Warcraft classic and retail.
 
 Download [Curse page](https://www.curseforge.com/wow/addons/coolline-classic-updated)
-
-It is the original CoolLine modified to be compatible with an addon I made: [ElvUI_CoolLine_Wrapper](https://www.curseforge.com/wow/addons/elvui-coolline-wrapper)
-[![](http://cf.way2muchnoise.eu/title/356978.svg)](https://www.curseforge.com/wow/addons/coolline-classic-updated)
-[![](http://cf.way2muchnoise.eu/versions/356978.svg)](https://www.curseforge.com/wow/addons/coolline-classic-updated)
-[![](http://cf.way2muchnoise.eu/full_356978_downloads.svg)](https://www.curseforge.com/wow/addons/coolline-classic-updated)
-![](https://github.com/LoneWanderer-GH/CoolLine/actions/workflows/build.yml/badge.svg)
 
 ## Blizzard encounter timeline
 
@@ -27,9 +21,10 @@ cooldowns without a usable native event stay on CoolLine's bar when it is on.
 Use `/coolline` or `/cl` to open settings. Use `/cl unlock` (or `/cl move`) to
 enable dragging and resizing, and `/cl lock` to finish. `/cl toggle` toggles
 that mode. The same unlock control is available in the Behavior section of the
-options. When `ElvUI_CoolLine_Wrapper` is loaded, use its mover to reposition
-CoolLine; the unlock control still enables resizing. `/coolline <spell/item
-name or ID>` toggles an entry in the dedicated cooldown blacklist;
+options. When ElvUI is loaded, CoolLine registers its frame as an ElvUI mover;
+use ElvUI's Movers configuration to reposition it. CoolLine's own drag-to-move
+behavior is disabled in that case, though resizing remains available.
+`/coolline <spell/item name or ID>` toggles an entry in the dedicated cooldown blacklist;
 `/coolline list` shows the current entries.
 Use `/cl debug` to toggle in-game cooldown diagnostics. It reports spells
 filtered by base cooldown, charge cooldowns found or missing recharge timing,

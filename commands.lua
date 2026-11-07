@@ -16,6 +16,24 @@ local function Color(text, color)
     return "|cff" .. color .. text .. "|r"
 end
 
+local function PrintUnlockStatus()
+    if CoolLine:IsAddonLoadedCompat("ElvUI") then
+        if CoolLine.canResize then
+            CoolLineApp:Print("Unlocked for resizing; move CoolLine using ElvUI's CoolLine mover.")
+        else
+            CoolLineApp:Print("Move CoolLine using ElvUI's CoolLine mover.")
+        end
+    elseif CoolLine.canDrag and CoolLine.canResize then
+        CoolLineApp:Print("Unlocked; drag to move and use the lower-right corner to resize.")
+    elseif CoolLine.canDrag then
+        CoolLineApp:Print("Unlocked for dragging; resizing is not supported by this client.")
+    elseif CoolLine.canResize then
+        CoolLineApp:Print("Unlocked for resizing; dragging is not supported by this client.")
+    else
+        CoolLineApp:Print("This client does not expose the APIs needed to move or resize the frame.")
+    end
+end
+
 local function AddConfigPreview(preview)
     CoolLine.NewCooldownClassic(
         "CoolLine Preview " .. preview.duration .. "s",
@@ -88,25 +106,17 @@ local function ShowOptions(input)
             .. Color("https://github.com/LoneWanderer-GH/CoolLine/issues", "00b3ff"))
     elseif input == "unlock" or input == "move" or input == "resize" then
         CoolLine:SetUnlocked(true)
-        if CoolLine.canDrag and CoolLine.canResize then
-            CoolLineApp:Print("Unlocked; drag to move and use the lower-right corner to resize.")
-        elseif CoolLine.canDrag then
-            CoolLineApp:Print("Unlocked for dragging; resizing is not supported by this client.")
-        elseif CoolLine.canResize and CoolLine:IsAddonLoadedCompat("ElvUI_CoolLine_Wrapper") then
-            CoolLineApp:Print("Unlocked for resizing; use ElvUI's mover to reposition it.")
-        elseif CoolLine.canResize then
-            CoolLineApp:Print("Unlocked for resizing; dragging is not supported by this client.")
-        elseif CoolLine:IsAddonLoadedCompat("ElvUI_CoolLine_Wrapper") then
-            CoolLineApp:Print("Use ElvUI's mover to reposition it; resizing is not supported by this client.")
-        else
-            CoolLineApp:Print("This client does not expose the APIs needed to move or resize the frame.")
-        end
+        PrintUnlockStatus()
     elseif input == "lock" then
         CoolLine:SetUnlocked(false)
         CoolLineApp:Print("Locked.")
     elseif input == "toggle" then
         CoolLine:ToggleUnlock()
-        CoolLineApp:Print(CoolLine.unlock and "Unlocked." or "Locked.")
+        if CoolLine.unlock then
+            PrintUnlockStatus()
+        else
+            CoolLineApp:Print("Locked.")
+        end
     elseif input == "debug" then
         CoolLine.cooldownDebugEnabled = not CoolLine.cooldownDebugEnabled
         CoolLine.cooldownDebugMessages = {}
