@@ -1,81 +1,75 @@
-local ORANGEY, LIGHTRED                       = '|cffFF4500', '|cffff6060'
-local version, build, date, build_toc_version = GetBuildInfo()
+local addonName = ...
+local CoolLineApp = LibStub("AceAddon-3.0"):GetAddon(addonName)
+
+local _, _, _, build_toc_version = GetBuildInfo()
 local major_version                           = floor(build_toc_version / 10000)
--- version numbering is X.XX.XX shorten in param 4 as XXXXX
---local SUPPORTED_RETAIL_VERSION                = 90000
---local MAX_SUPPORTED_RETAIL_VERSION            = 90099
---local MAX_SUPPORTED_CLASSIC_VERSION           = 19999
---local MAX_SUPPORTED_TBC_VERSION               = 29999--20501
---local IS_RETAIL_RELEASE                       = (SUPPORTED_RETAIL_VERSION <= build_toc_version and build_toc_version <= MAX_SUPPORTED_RETAIL_VERSION)
---local IS_CLASSIC                              = (build_toc_version <= MAX_SUPPORTED_CLASSIC_VERSION)
---local IS_TBC                                  = (build_toc_version > MAX_SUPPORTED_CLASSIC_VERSION and build_toc_version <= MAX_SUPPORTED_TBC_VERSION)
+local IS_RETAIL_RELEASE                       = (WOW_PROJECT_ID and WOW_PROJECT_MAINLINE and WOW_PROJECT_ID == WOW_PROJECT_MAINLINE) or major_version >= 10
 
---@version-retail@
-local MAX_SUPPORTED_VERSION                   = 90099
---@end-version-retail@
+local AddonBackdropTemplate = 42
+if WOW_PROJECT_ID == WOW_PROJECT_CLASSIC then
+    AddonBackdropTemplate = nil
+else
+    AddonBackdropTemplate = "BackdropTemplate"
+end
 
---@version-classic@
-local MAX_SUPPORTED_VERSION                   = 19999
---@end-version-classic@
-
---@version-bcc@
-local MAX_SUPPORTED_VERSION                   = 20599
---@end-version-bcc@
-
---[===[@non-version-classic@
-local AddonBackdropTemplate = "BackdropTemplate"
---@end-non-version-classic@]===]
---@version-classic@
-local AddonBackdropTemplate                   = nil
---@end-version-classic@
-
-local MAX_MAJOR_VERSION                       = floor(MAX_SUPPORTED_VERSION / 10000)
-
-local CoolLine                                = CreateFrame("Frame", "CoolLine", UIParent)
-CoolLine.MainFrame                            = CoolLine
+local CoolLine = CoolLineApp.MainFrame
+CoolLine.IS_RETAIL_RELEASE = IS_RETAIL_RELEASE
 
 CoolLine:SetScript("OnEvent", function(this, event, ...)
     this[event](this, ...)
 end)
 
-if build_toc_version > MAX_SUPPORTED_VERSION or (major_version < MAX_MAJOR_VERSION) then
-    print(format("!!! %sBEWARE %s!!!!", LIGHTRED, "|r"))
-    local coolline_version = "@project-version@"
-    print(format("%sCoolLine v%s hasn't been updated to support WoW v |r%s - %sbuild|r %s- %sdate|r %s - %sversion number|r %s",
-                 ORANGEY, coolline_version, version,
-                 ORANGEY, build,
-                 ORANGEY, date,
-                 ORANGEY, build_toc_version))
-    print(format("%sPlease file any bugs you find @ https://github.com/LoneWanderer-GH/CoolLine/issues", ORANGEY))
-    print(format("%sPlease be precise and provide as much intel as needed (PTR realm, release, beta etc.)", ORANGEY))
-    print(format("%sMax supported version is |r%s", ORANGEY, MAX_SUPPORTED_VERSION))
-end
-
 local smed                                                  = LibStub("LibSharedMedia-3.0")
 
 local _G, pairs, strmatch, tinsert, tremove, random         = _G, pairs, string.match, table.insert, table.remove, math.random
 local GetTime                                               = GetTime
-local GetSpellInfo                                          = GetSpellInfo
 local UnitExists, HasPetUI                                  = UnitExists, HasPetUI
 
+
 local db, block
+function CoolLine:IsBlocked(name, id)
+    return (name and block[name]) or (id and (block[id] or block[tostring(id)]))
+end
+
+function CoolLine:LogCooldownDebug(key, message)
+    if not self.cooldownDebugEnabled then
+        return
+    end
+    self.cooldownDebugMessages = self.cooldownDebugMessages or {}
+    if self.cooldownDebugMessages[key] == message then
+        return
+    end
+    self.cooldownDebugMessages[key] = message
+    local category = key:match("^timeline:") and "Timeline"
+        or key:match("^options:") and "Options"
+        or (key:match("^create:") or key:match("^config:")) and "Core"
+        or "Spellbook"
+    CoolLineApp:Debug(category, message)
+end
+
 local backdrop                                              = { edgeSize = 16 } -- Left Unchanged
 local section, iconsize                                     = 0, 0
 local tick0, tick1, tick3, tick10, tick30, tick120, tick300
-local BOOKTYPE_SPELL, BOOKTYPE_PET                          = BOOKTYPE_SPELL, BOOKTYPE_PET
+local spellBookBanks                                        = Enum and Enum.SpellBookSpellBank
+local BOOKTYPE_SPELL                                        = BOOKTYPE_SPELL or (spellBookBanks and spellBookBanks.Player) or "spell"
+local BOOKTYPE_PET                                          = BOOKTYPE_PET or (spellBookBanks and spellBookBanks.Pet) or "pet"
 local spells                                                = { [BOOKTYPE_SPELL] = { }, [BOOKTYPE_PET] = { }, }
 local chargespells                                          = { [BOOKTYPE_SPELL] = { }, [BOOKTYPE_PET] = { }, }
 local frames, cooldowns, specialspells                      = { }, { }, { }
 
 CoolLine.spells, CoolLine.chargespells                      = spells, chargespells
 CoolLine.frames, CoolLine.cooldowns, CoolLine.specialspells = frames, cooldowns, specialspells
+CoolLine.BOOKTYPE_SPELL, CoolLine.BOOKTYPE_PET = BOOKTYPE_SPELL, BOOKTYPE_PET
 
-local NO_RELOCATE                                           = "NO_RELOCATE"
-CoolLine.NO_RELOCATE                                        = NO_RELOCATE
+local MINIMUM_COOLDOWN_DURATION_MS                          = 2499
+local DEFAULT_RETAIL_GCD_DURATION_S                         = 1.5 -- 0.749
+local DEFAULT_RETAIL_MAX_DURATION_S                         = 3601
+CoolLine.MINIMUM_COOLDOWN_DURATION_MS = MINIMUM_COOLDOWN_DURATION_MS
+CoolLine.DEFAULT_RETAIL_GCD_DURATION_S = DEFAULT_RETAIL_GCD_DURATION_S
+CoolLine.DEFAULT_RETAIL_MAX_DURATION_S = DEFAULT_RETAIL_MAX_DURATION_S
 
-local MINIMUM_COOLDOWN_DURATION                             = 2499
-
-local SetValue, updatelook, createfs, ShowOptions, RuneCheck
+local SetValue, updatelook, createfs, RuneCheck
+local RefreshCooldownDisplay
 
 local function SetValueH(this, v, just)
     this:SetPoint(just or "CENTER", CoolLine, "LEFT", v, 0)
@@ -91,31 +85,6 @@ end
 
 local function SetValueVR(this, v, just)
     this:SetPoint(just or "CENTER", CoolLine, "BOTTOM", 0, db.h - v)
-end
-
---------------------------------
--- For 3rd party addons such as ElvUI
-function CoolLine:SetConfig(w, h, x, y, font, fontsize, inactivealpha, activealpha, statusbar, updateOption)
-    --------------------------------
-    if db then
-        db.w             = w or db.w
-        db.h             = h or db.h
-        -- db.x             = x         or db.x
-        -- db.y             = y         or db.y
-        db.font          = font or db.font
-        db.fontsize      = fontsize or db.fontsize
-        db.statusbar     = statusbar or db.statusbar
-        db.activealpha   = activealpha or db.activealpha
-        db.inactivealpha = inactivealpha or db.inactivealpha
-    else
-        -- ?
-        print("CoolLine SetConfig called but no db loaded")
-    end
-    self.updatelook(updateOption)
-end
-
-function CoolLine:getConfig()
-    return db.w, db.h, db.x, db.y, db.font, db.fontsize, db.inactivealpha, db.activealpha, db.statusbar
 end
 
 CoolLine:RegisterEvent("ADDON_LOADED")
@@ -134,6 +103,12 @@ function CoolLine:ADDON_LOADED(a1)
         CoolLineCharDB = nil
         db             = CoolLineDB
     end
+
+    -- local hearthstoneName = GetItemInfo and GetItemInfo(6948)
+    -- if not hearthstoneName and C_Item and C_Item.GetItemNameByID then
+    --     hearthstoneName = C_Item.GetItemNameByID(6948)
+    -- end
+    local hearthstoneName = self:GetItemNameCompat(6948)
 
     if db.dbinit ~= 3 then
         db.dbinit = 3
@@ -154,26 +129,48 @@ function CoolLine:ADDON_LOADED(a1)
                               inactivealpha = 0.5,
                               activealpha   = 1.0,
                               block         = {  -- [spell or item name] = true,
-                                  [GetItemInfo(6948) or "Hearthstone"] = true, -- Hearthstone
+                                  [hearthstoneName or "Hearthstone"] = true, -- Hearthstone
                               },
                           }) do
             db[k] = (db[k] ~= nil and db[k]) or v
         end
     end
+    if db.blizzardTimeline == nil then
+        db.blizzardTimeline = false
+    end
+    if db.legacyTimeline == nil then
+        db.legacyTimeline = true
+    end
+    if db.timelinePlayer == nil then
+        db.timelinePlayer = true
+    end
+    if db.timelinePet == nil then
+        db.timelinePet = false
+    end
+    if db.timelineItem == nil then
+        db.timelineItem = false
+    end
+    if db.showConfigPreviews == nil then
+        db.showConfigPreviews = false
+    end
     block          = db.block
+    CoolLine.db    = db
+    
+    CoolLineApp:Debug("Core", "Loaded CoolLine configuration")
+    
 
     local _, class = UnitClass("player")
     if class == "DEATHKNIGHT" then
         local runecd = {  -- fix by NeoSyrex
-            [GetSpellInfo(50977) or "Death Gate"]       = 11,
-            [GetSpellInfo(43265) or "Death and Decay"]  = 11,
-            [GetSpellInfo(42650) or "Army of the Dead"] = 11,
-            --			[GetSpellInfo(47476) or "Strangulate"] = 11,
-            --			[GetSpellInfo(51052) or "Anti-Magic Zone"] = 11,
-            --			[GetSpellInfo(63560) or "Dark Transformation"] = 10,
-            [GetSpellInfo(49184) or "Howling Blast"]    = 8,
-            --			[GetSpellInfo(51271) or "Pillar of Frost"] = 11,
-            --			[GetSpellInfo(55233) or "Vampiric Blood"] = 11,
+            [self:GetSpellInfoCompat(50977) or "Death Gate"]       = 11,
+            [self:GetSpellInfoCompat(43265) or "Death and Decay"]  = 11,
+            [self:GetSpellInfoCompat(42650) or "Army of the Dead"] = 11,
+            --			[self:GetSpellInfoCompat(47476) or "Strangulate"] = 11,
+            --			[self:GetSpellInfoCompat(51052) or "Anti-Magic Zone"] = 11,
+            --			[self:GetSpellInfoCompat(63560) or "Dark Transformation"] = 10,
+            [self:GetSpellInfoCompat(49184) or "Howling Blast"]    = 8,
+            --			[self:GetSpellInfoCompat(51271) or "Pillar of Frost"] = 11,
+            --			[self:GetSpellInfoCompat(55233) or "Vampiric Blood"] = 11,
         }
         RuneCheck    = function(name, duration)
             local rc = runecd[name]
@@ -183,50 +180,15 @@ function CoolLine:ADDON_LOADED(a1)
         end
     elseif class == "PRIEST" then
         specialspells = {
-            [GetSpellInfo(81209) or "blah"] = 81209, -- Chakra: Chastise
-            [GetSpellInfo(88684) or "blah"] = 88684, -- Holy Word: Serenity
-            [GetSpellInfo(88685) or "blah"] = 88685, -- Holy Word: Sanctuary
-            [GetSpellInfo(88625) or "blah"] = 88625, -- Holy Word: Chastise
+            [self:GetSpellInfoCompat(81209) or "blah"] = 81209, -- Chakra: Chastise
+            [self:GetSpellInfoCompat(88684) or "blah"] = 88684, -- Holy Word: Serenity
+            [self:GetSpellInfoCompat(88685) or "blah"] = 88685, -- Holy Word: Sanctuary
+            [self:GetSpellInfoCompat(88625) or "blah"] = 88625, -- Holy Word: Chastise
+            [self:GetSpellInfoCompat(88625) or "blah"] = 88625, -- Holy Word: Chastise
         }
     end
-
-    SlashCmdList.COOLLINE = ShowOptions
-    SLASH_COOLLINE1       = "/coolline"
-
-    local panel           = CreateFrame("Frame")
-    panel.name            = "CoolLine"
-    panel:SetScript("OnShow", function(this)
-        local t1 = this:CreateFontString(nil, "ARTWORK")
-        t1:SetJustifyH("LEFT")
-        t1:SetJustifyV("TOP")
-        t1:SetFontObject(GameFontNormalLarge)
-        t1:SetPoint("TOPLEFT", 16, -16)
-        t1:SetText(this.name)
-
-        local t2 = this:CreateFontString(nil, "ARTWORK")
-        t2:SetJustifyH("LEFT")
-        t2:SetJustifyV("TOP")
-        t2:SetFontObject(GameFontHighlightSmall)
-        t2:SetHeight(43)
-        t2:SetPoint("TOPLEFT", t1, "BOTTOMLEFT", 0, -8)
-        t2:SetPoint("RIGHT", this, "RIGHT", -32, 0)
-        t2:SetNonSpaceWrap(true)
-        t2:SetFormattedText("Notes: %s\nAuthor: %s\nVersion: %s\n" ..
-                                    "Hint: |cffffff00/coolline|r to open menu; |cffffff00/coolline SpellOrItemNameOrLink|r to add/remove filter",
-                            GetAddOnMetadata("CoolLine", "Notes") or "N/A",
-                            GetAddOnMetadata("CoolLine", "Author") or "N/A",
-                            GetAddOnMetadata("CoolLine", "Version") or "N/A")
-
-        local b = CreateFrame("Button", nil, this, "UIPanelButtonTemplate")
-        b:SetWidth(120)
-        b:SetHeight(20)
-        b:SetText("Options Menu")
-        b:SetScript("OnClick", ShowOptions)
-        b:SetPoint("TOPLEFT", t2, "BOTTOMLEFT", -2, -8)
-        this:SetScript("OnShow", nil)
-    end)
-
-    InterfaceOptions_AddCategory(panel)
+    CoolLine.RuneCheck = RuneCheck
+    CoolLine.specialspells = specialspells
 
     createfs            = function(f, text, offset, just)
         local fs = f or self.overlay:CreateFontString(nil, "OVERLAY")
@@ -259,11 +221,12 @@ function CoolLine:ADDON_LOADED(a1)
         return fs
     end
 
-    updatelook          = function(option)
+    updatelook          = function()
         self:SetWidth(db.w or 130)
         self:SetHeight(db.h or 18)
 
-        if option ~= NO_RELOCATE then
+        if not self.ElvUIMoverCreated then
+            self:ClearAllPoints()
             self:SetPoint("CENTER", UIParent, "CENTER", db.x or 0, db.y or -240)
         end
 
@@ -301,8 +264,8 @@ function CoolLine:ADDON_LOADED(a1)
         tick3    = createfs(tick3, "3", section * 2)
         tick10   = createfs(tick10, "10", section * 3)
         tick30   = createfs(tick30, "30", section * 4)
-        tick120  = createfs(tick120, "2m", section * 5)
-        tick300  = createfs(tick300, "6m", section * 6, "RIGHT")
+        tick120  = createfs(tick120, "2 m", section * 5)
+        tick300  = createfs(tick300, "6 m", section * 6, "RIGHT")
 
         if not self.cb and (not smed:IsValid("font", db.font) or not smed:IsValid("border", db.border) or not smed:IsValid("statusbar", db.statusbar)) then
             smed.RegisterCallback(self, "LibSharedMedia_Registered", updatelook)
@@ -334,9 +297,16 @@ function CoolLine:ADDON_LOADED(a1)
 
         for i = 1, #cooldowns do
             cooldowns[i]:SetSize(iconsize, iconsize)
+            if SyncTimelineEvent then
+                SyncTimelineEvent(cooldowns[i])
+            end
+        end
+        if RefreshCooldownDisplay then
+            RefreshCooldownDisplay()
         end
     end
     CoolLine.updatelook = updatelook
+    self:SetupOptions()
 
     if IsLoggedIn() then
         CoolLine:PLAYER_LOGIN()
@@ -354,6 +324,9 @@ function CoolLine:PLAYER_LOGIN()
     self:RegisterEvent("SPELL_UPDATE_CHARGES")
     self.SPELL_UPDATE_CHARGES = self.SPELL_UPDATE_COOLDOWN
     self:SPELL_UPDATE_COOLDOWN()
+    if C_EncounterTimeline and C_EncounterTimeline.IsFeatureAvailable then
+        self:RegisterEvent("ENCOUNTER_TIMELINE_STATE_UPDATED")
+    end
 
     --@version-retail@
     self:RegisterEvent("PET_BATTLE_OPENING_START")
@@ -372,6 +345,9 @@ function CoolLine:PLAYER_LOGIN()
     --@end-version-retail@
 
     updatelook()
+    if db.showConfigPreviews and CoolLine.SetConfigPreviews then
+        CoolLine:SetConfigPreviews(true)
+    end
     self:SetAlpha((#cooldowns == 0 and db.inactivealpha) or db.activealpha)
     self:RegisterEvent("PLAYER_LEAVING_WORLD")
 end
@@ -396,18 +372,33 @@ end
 local iconback                        = { bgFile = "Interface\\AddOns\\CoolLine\\backdrop.tga" }
 local elapsed, throt, ptime, isactive = 0, 1.5, 0, false
 
-local function ClearCooldown(f, name)
+local function ClearCooldown(f, name, source)
     name = name or (f and f.name)
+    source = source or (f and f.source)
     for i = 1, #cooldowns do
         local frame = cooldowns[i]
-        if frame.name == name then
+        if frame.name == name and (not source or frame.source == source) then
+            if SyncTimelineEvent then
+                frame.spellID = nil
+                SyncTimelineEvent(frame)
+            end
             frame:Hide()
             frame.name    = nil
             frame.endtime = nil
+            frame.remaining_duration = nil
+            frame.source = nil
             tinsert(frames, tremove(cooldowns, i))
             break
         end
     end
+end
+
+local function SyncTimelineEvent(frame)
+    CoolLine:SyncTimelineEvent(frame)
+end
+
+local function NativeTimelineEnabled()
+    return CoolLine:IsNativeTimelineEnabled()
 end
 
 local function SetupIcon(frame, position, tthrot, active, fl)
@@ -419,6 +410,10 @@ local function SetupIcon(frame, position, tthrot, active, fl)
     SetValue(frame, position)
 end
 
+local function IsLegacyCooldown(frame)
+    return frame.source == "config" or (db.legacyTimeline ~= false and not frame.timelineEventID)
+end
+
 local function OnUpdate(this, a1, ctime, dofl)
     elapsed = elapsed + a1
     if elapsed < throt then
@@ -426,11 +421,18 @@ local function OnUpdate(this, a1, ctime, dofl)
     end
     elapsed = 0
 
-    if #cooldowns == 0 then
-        if not CoolLine.unlock then
-            CoolLine:SetScript("OnUpdate", nil)
-            CoolLine:SetAlpha(db.inactivealpha)
+    local hasLegacyCooldowns = false
+    for _, frame in pairs(cooldowns) do
+        if IsLegacyCooldown(frame) then
+            hasLegacyCooldowns = true
+            break
         end
+    end
+
+    if not hasLegacyCooldowns then
+        CoolLine:SetScript("OnUpdate", nil)
+        CoolLine:SetAlpha(CoolLine.unlock and db.activealpha
+            or ((db.legacyTimeline == false or NativeTimelineEnabled()) and 0 or db.inactivealpha))
         return
     end
 
@@ -441,7 +443,14 @@ local function OnUpdate(this, a1, ctime, dofl)
     isactive, throt = false, 1.5
 
     for index, frame in pairs(cooldowns) do
-        local remain = frame.endtime - ctime
+        local remain
+        if frame.endtime then
+            remain = frame.endtime - ctime
+        elseif frame.remaining_duration then
+            remain = frame.remaining_duration - (ctime - (frame.cooldownSampleTime or ctime))
+        else
+            --
+        end
         if remain < 3 then
             if remain > 1 then
                 SetupIcon(frame, section * (remain + 1) * 0.5, 0.02, true, dofl)  -- 1 + (remain - 1) / 2
@@ -479,17 +488,133 @@ local function OnUpdate(this, a1, ctime, dofl)
     end
 end
 
-local function NewCooldown(name, icon, endtime, isplayer)
-    local f
-    for index, frame in pairs(cooldowns) do
-        if frame.name == name and frame.isplayer == isplayer then
-            f = frame
-            break
-        elseif frame.endtime == endtime then
-            return
+local RefreshCooldownDisplay = function()
+    local hasLegacyCooldowns = false
+    for _, frame in pairs(cooldowns) do
+        SyncTimelineEvent(frame)
+        if IsLegacyCooldown(frame) then
+            frame:Show()
+            hasLegacyCooldowns = true
+        else
+            frame:Hide()
         end
     end
 
+    if hasLegacyCooldowns then
+        CoolLine:SetScript("OnUpdate", OnUpdate)
+        CoolLine:SetAlpha(db.activealpha)
+        OnUpdate(CoolLine, 2)
+    else
+        CoolLine:SetScript("OnUpdate", nil)
+        CoolLine:SetAlpha(CoolLine.unlock and db.activealpha
+            or ((db.legacyTimeline == false or NativeTimelineEnabled()) and 0 or db.inactivealpha))
+    end
+end
+CoolLine.RefreshCooldownDisplay = RefreshCooldownDisplay
+
+local function NewCooldownClassic(name, icon, endtime, isplayer, spellID, source)
+    if not name or not icon or not endtime then
+        
+        CoolLine:LogCooldownDebug("create:classic-invalid:" .. tostring(spellID or name),
+            "NewCooldownClassic received missing parameters (name: " .. tostring(name)
+                .. ", icon: " .. tostring(icon) .. ", end time: " .. tostring(endtime)
+                .. ", is player: " .. tostring(isplayer) .. ", spell ID: "
+                .. tostring(spellID) .. ").")
+        
+        return
+    end
+    -- print("CoolLine: NewCooldownClassic called with parameters:", name, icon, endtime, isplayer, spellID)
+    source = source or (isplayer and "player") or (spellID and "pet") or "item"
+    local frame
+    for index, existing_frame in pairs(cooldowns) do
+        if existing_frame.name == name and existing_frame.source == source then
+            frame = existing_frame
+            break
+        elseif existing_frame.endtime == endtime and existing_frame.source == source then
+            return
+        -- ROBUSTNESS ? elseif existing_frame.remaining_duration == 0 then
+        --     return
+        end
+    end
+
+    if not frame then
+        frame = frame or tremove(frames)
+        if not frame then
+            frame = CreateFrame("Frame", nil, CoolLine.border, AddonBackdropTemplate)
+            frame:SetBackdrop(iconback)
+            frame.icon = frame:CreateTexture(nil, "ARTWORK")
+            frame.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+            frame.icon:SetPoint("TOPLEFT", 1, -1)
+            frame.icon:SetPoint("BOTTOMRIGHT", -1, 1)
+            -- print("CoolLine: Created new cooldown frame with parameters:", name, icon, endtime, isplayer, spellID)
+        end
+        tinsert(cooldowns, frame)
+    end
+
+    local ctime = GetTime()
+    frame:SetWidth(iconsize)
+    frame:SetHeight(iconsize)
+    frame:SetAlpha((endtime - ctime > 360) and 0.6 or 1)
+
+    frame.name, frame.endtime, frame.isplayer, frame.spellID, frame.iconTexture =
+        name, endtime, isplayer, spellID, icon
+    frame.source = source
+    frame.icon:SetTexture(icon)
+    SyncTimelineEvent(frame)
+
+    local c = db[isplayer and "spellcolor" or "nospellcolor"]
+    frame:SetBackdropColor(c.r, c.g, c.b, c.a)
+    RefreshCooldownDisplay()
+end
+
+local function NewCooldownRetail(name, icon, remaining_duration, isplayer, spellID, source)
+    --name, id, duration, btype == BOOKTYPE_SPELL
+    source = source or (isplayer and "player") or (spellID and "pet") or "item"
+    if CoolLine:IsSecretValueCompat(remaining_duration) then
+        
+        CoolLine:LogCooldownDebug("create:" .. source .. ":" .. tostring(spellID or name),
+            "Skipped " .. source .. " cooldown with a secret remaining duration (spell ID: "
+                .. tostring(spellID or "unknown") .. ").")
+        
+        return
+    end
+    
+    CoolLine:LogCooldownDebug("create:" .. source .. ":" .. tostring(spellID or name),
+        "Received a readable " .. source .. " cooldown (spell ID: "
+            .. tostring(spellID or "unknown") .. ").")
+    
+    if not name or not icon or not remaining_duration then
+        
+        CoolLine:LogCooldownDebug("create:invalid:" .. tostring(spellID or name),
+            "NewCooldownRetail received missing parameters (name: " .. tostring(name)
+                .. ", icon: " .. tostring(icon) .. ", remaining duration: "
+                .. tostring(remaining_duration) .. ", is player: " .. tostring(isplayer)
+                .. ", spell ID: " .. tostring(spellID) .. ").")
+        
+        return
+    end
+    -- print("CoolLine: NewCooldownRetail called with parameters:", name, icon, endtime, isplayer, spellID)
+    local f
+    for index, frame in pairs(cooldowns) do
+        if frame.name == name and frame.source == source then
+            f = frame
+            break
+        -- elseif frame.endtime == endtime then
+        --     return
+        end
+    end
+    local previousRemaining = f and f.remaining_duration
+    local previousSample = f and f.cooldownSampleTime
+    if previousRemaining and previousSample then
+        local expectedRemaining = previousRemaining - (GetTime() - previousSample)
+        if remaining_duration > expectedRemaining + 2 then
+            
+            CoolLine:LogCooldownDebug("timeline-restart:" .. source .. ":" .. tostring(spellID or name),
+                "Cooldown for " .. tostring(name) .. " restarted or was extended; replacing its Blizzard timeline event.")
+            
+            CoolLine:CancelTimelineEvent(f)
+        end
+    end
     if not f then
         f = f or tremove(frames)
         if not f then
@@ -499,196 +624,84 @@ local function NewCooldown(name, icon, endtime, isplayer)
             f.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
             f.icon:SetPoint("TOPLEFT", 1, -1)
             f.icon:SetPoint("BOTTOMRIGHT", -1, 1)
+            -- print("CoolLine: Created new cooldown frame with parameters:", name, icon, endtime, isplayer, spellID)
         end
         tinsert(cooldowns, f)
     end
-
-    local ctime = GetTime()
     f:SetWidth(iconsize)
     f:SetHeight(iconsize)
-    f:SetAlpha((endtime - ctime > 360) and 0.6 or 1)
+    f:SetAlpha((remaining_duration > 360.) and 0.6 or 1)
 
-    f.name, f.endtime, f.isplayer = name, endtime, isplayer
+    f.name, f.remaining_duration, f.isplayer, f.spellID, f.iconTexture =
+        name, remaining_duration, isplayer, spellID, icon
+    f.source = source
+    f.cooldownSampleTime = GetTime()
     f.icon:SetTexture(icon)
+    SyncTimelineEvent(f)
 
     local c = db[isplayer and "spellcolor" or "nospellcolor"]
     f:SetBackdropColor(c.r, c.g, c.b, c.a)
-    f:Show()
-
-    CoolLine:SetScript("OnUpdate", OnUpdate)
-    CoolLine:SetAlpha(db.activealpha)
-    OnUpdate(CoolLine, 2, ctime)
+    RefreshCooldownDisplay()
 end
 
-CoolLine.NewCooldown, CoolLine.ClearCooldown = NewCooldown, ClearCooldown
+CoolLine.NewCooldownClassic, CoolLine.ClearCooldown, CoolLine.NewCooldownRetail = NewCooldownClassic, ClearCooldown, NewCooldownRetail
+CoolLine.IconBackdrop = iconback
 
-do
-    -- cache spells that have a cooldown
-    local GetSpellBookItemName, GetSpellBookItemInfo, GetSpellBaseCooldown, GetSpellCharges = GetSpellBookItemName, GetSpellBookItemInfo, GetSpellBaseCooldown, GetSpellCharges
-    local function CacheBook(btype)
-        local lastID
-        local sb = spells[btype]
-
-        local _, numTabs
-        numTabs  = GetNumSpellTabs()
-        for i = 1, numTabs do
-            local _, _, offset, numSpells = GetSpellTabInfo(i)
-            for j = 1, offset + numSpells do
-                local spellName = GetSpellBookItemName(j, btype)
-                if not spellName then
-                    break
-                end
-                local spellType, spellID = GetSpellBookItemInfo(j, btype)
-                if IS_RETAIL_RELEASE and spellID and spellType == "FLYOUT" then
-                    local _, _, numSlots, isKnown = GetFlyoutInfo(spellID)
-                    if isKnown then
-                        for k = 1, numSlots do
-                            local flyID, _, _, flyName = GetFlyoutSlotInfo(spellID, k)
-                            lastID                     = flyID
-                            if flyID then
-                                local flyCD = GetSpellBaseCooldown(flyID)
-                                if flyCD and flyCD > MINIMUM_COOLDOWN_DURATION then
-                                    sb[flyID] = flyName -- specialspells[flyID] or flyName
-                                end
-                            end
-                        end
-                    end
-                elseif spellID and (spellType == "SPELL" or spellType == "PETACTION") and spellID ~= lastID then
-                    -- Base spell = slot ID + name from slot ID
-                    -- Real spell = ID from slot name + name from slot name
-                    -- For the purposes of CoolLine we only care about the real spell.
-                    lastID                            = spellID
-                    spellName, _, _, _, _, _, spellID = GetSpellInfo(spellName)
-                    if spellID then
-                        -- Special spells like warlock Cauterize Master can be in
-                        -- a limbo state during loading. Just ignore them in that
-                        -- case. The spellbook will update again momentarily and
-                        -- they will correctly resolve then.
-                        local _, maxCharges = GetSpellCharges(spellID)
-                        if maxCharges and maxCharges > 0 then
-                            chargespells[btype][spellID] = spellName
-                        else
-                            local cd = GetSpellBaseCooldown(spellID)
-                            if cd and cd > MINIMUM_COOLDOWN_DURATION then
-                                sb[spellID] = spellName
-                                --			if specialspells[spellName] then
-                                --				sb[ specialspells[spellName] ] = spellName
-                                --			end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    ----------------------------------
-    function CoolLine:SPELLS_CHANGED()
-        ----------------------------------
-        CacheBook(BOOKTYPE_SPELL)
-        if not db.hidepet then
-            CacheBook(BOOKTYPE_PET)
-        end
-    end
-end
-
-do
-    -- scans spellbook to update cooldowns, throttled since the event fires a lot
-    local selap                                              = 0
-    local spellthrot                                         = CreateFrame("Frame", nil, CoolLine)
-    local GetSpellCooldown, GetSpellTexture, GetSpellCharges = GetSpellCooldown, GetSpellTexture, GetSpellCharges
-
-    local function CheckSpellBook(btype)
-        for id, name in pairs(spells[btype]) do
-            local start, duration, enable = GetSpellCooldown(name)
-            if enable == 1 and start > 0 and not block[name] and (not RuneCheck or RuneCheck(name, duration)) then
-                if duration > 2.5 then
-                    local _, _, texture = GetSpellInfo(id)
-                    NewCooldown(name, texture, start + duration, btype == BOOKTYPE_SPELL)
-                else
-                    for i = 1, #cooldowns do
-                        local frame = cooldowns[i]
-                        if frame.name == name then
-                            if frame.endtime > start + duration + 0.1 then
-                                frame.endtime = start + duration
-                            end
-                            break
-                        end
-                    end
-                end
-            else
-                ClearCooldown(nil, name)
-            end
-        end
-
-        for id, name in pairs(chargespells[btype]) do
-            local currentCharges, maxCharges, cooldownStart, cooldownDuration = GetSpellCharges(id)
-            if cooldownStart and cooldownDuration and currentCharges < maxCharges and not block[name] then
-                local _, _, texture = GetSpellInfo(id)
-                NewCooldown(name, texture, cooldownStart + cooldownDuration, btype == BOOKTYPE_SPELL)
-            else
-                ClearCooldown(nil, name)
-            end
-        end
-    end
-
-    spellthrot:SetScript("OnUpdate", function(this, a1)
-        selap = selap + a1
-        if selap < 0.3 then
-            return
-        end
-        selap = 0
-        this:Hide()
-        CheckSpellBook(BOOKTYPE_SPELL)
-        if not db.hidepet and HasPetUI() then
-            CheckSpellBook(BOOKTYPE_PET)
-        end
-    end)
-
-    spellthrot:Hide()
-
-    -----------------------------------------
-    function CoolLine:SPELL_UPDATE_COOLDOWN()
-        -----------------------------------------
-        spellthrot:Show()
-    end
-end
 
 do
     -- scans equipments and bags for item cooldowns
-    local GetItemInfo                                       = GetItemInfo
-    local GetInventoryItemCooldown, GetInventoryItemTexture = GetInventoryItemCooldown, GetInventoryItemTexture
-    local GetContainerItemCooldown, GetContainerItemInfo    = GetContainerItemCooldown, GetContainerItemInfo
-    local GetContainerNumSlots                              = GetContainerNumSlots
+    local GetItemInfo                                       = C_Item and C_Item.GetItemInfo or _G.GetItemInfo
+    -- local GetInventoryItemCooldown, GetInventoryItemTexture = GetInventoryItemCooldown, GetInventoryItemTexture
+    -- local GetContainerItemCooldown                          = C_Container and C_Container.GetItemCooldown or _G.GetContainerItemCooldown
+    local GetContainerNumSlots                              = C_Container and C_Container.GetContainerNumSlots or _G.GetContainerNumSlots
+    local GetContainerItemLink                                 = C_Container and C_Container.GetContainerItemLink or _G.GetContainerItemLink
+    
+    local maxBagSlots = NUM_BAG_SLOTS or (Constants and Constants.InventoryConstants and Constants.InventoryConstants.NumBagSlots) or 4
 
     ---------------------------------------
     function CoolLine:BAG_UPDATE_COOLDOWN()
-        ---------------------------------------
+    ---------------------------------------
+        -- scan equipped objects
         for i = 1, (db.hideinv and 0) or 18 do
             local start, duration, enable = GetInventoryItemCooldown("player", i)
             if enable == 1 then
-                local name = GetItemInfo(GetInventoryItemLink("player", i))
-                if start > 0 and not block[name] then
-                    if duration > 3 and duration < 3601 then
-                        NewCooldown(name, GetInventoryItemTexture("player", i), start + duration)
+                --local name = GetItemInfo(GetInventoryItemLink("player", i))
+                local link = GetInventoryItemLink("player", i)
+                local name = link and GetItemInfo(link)
+                if start > 0 and not self:IsBlocked(name, GetInventoryItemID and GetInventoryItemID("player", i)) then -- 'and name' ?
+                    if duration > DEFAULT_RETAIL_GCD_DURATION_S and duration < DEFAULT_RETAIL_MAX_DURATION_S then
+                        local texture = GetInventoryItemTexture("player", i)
+                        -- print("CoolLine: Adding cooldown for item:", name, "Texture:", texture, "Start:", start, "Duration:", duration)
+                        local itemID = GetInventoryItemID and GetInventoryItemID("player", i)
+                        NewCooldownClassic(name, texture, start + duration, false,
+                            self:GetItemSpellIDCompat(itemID), "item")
                     end
                 else
-                    ClearCooldown(nil, name)
+                    ClearCooldown(nil, name, "item")
                 end
+
             end
         end
-
-        for i = 0, (db.hidebag and -1) or 4 do
-            for j = 1, GetContainerNumSlots(i) do
-                local start, duration, enable = GetContainerItemCooldown(i, j)
+        -- scan bags
+        for i = 0, (db.hidebag and -1) or maxBagSlots do
+            local numSlots = GetContainerNumSlots(i) or 0
+            for j = 1, numSlots do
+                local start, duration, enable = CoolLine:GetContainerItemCooldownCompat(i, j)
                 if enable == 1 then
-                    local name = GetItemInfo(GetContainerItemLink(i, j))
-                    if start > 0 and not block[name] then
-                        if duration > 3 and duration < 3601 then
-                            NewCooldown(name, GetContainerItemInfo(i, j), start + duration)
+                    --local name = GetItemInfo(GetContainerItemLink(i, j))
+                    local link = GetContainerItemLink(i, j)
+                    local name = link and GetItemInfo(link)
+                    if start > 0 and not self:IsBlocked(name, self:GetContainerItemIDCompat(i, j)) then
+                        if duration > DEFAULT_RETAIL_GCD_DURATION_S and duration < DEFAULT_RETAIL_MAX_DURATION_S then
+                            -- NewCooldown(name, GetContainerItemInfo(i, j), start + duration)
+                            local texture = CoolLine:GetContainerItemIconCompat(i, j)
+                            -- print("CoolLine: Adding cooldown for bag item:", name, "Texture:", texture, "Start:", start, "Duration:", duration) 
+                            local itemID = self:GetContainerItemIDCompat(i, j)
+                            NewCooldownClassic(name, texture, start + duration, false,
+                                self:GetItemSpellIDCompat(itemID), "item")
                         end
                     else
-                        ClearCooldown(nil, name)
+                        ClearCooldown(nil, name, "item")
                     end
                 end
             end
@@ -698,7 +711,7 @@ end
 
 -------------------------------------------
 function CoolLine:PET_BAR_UPDATE_COOLDOWN()
-    -------------------------------------------
+-------------------------------------------
     for i = 1, 10 do
         local start, duration, enable = GetPetActionCooldown(i)
         if enable == 1 then
@@ -709,12 +722,13 @@ function CoolLine:PET_BAR_UPDATE_COOLDOWN()
                 name, _, texture = GetPetActionInfo(i)
             end
             if name then
-                if start > 0 and not block[name] then
-                    if duration > 3 then
-                        NewCooldown(name, texture, start + duration)
+                if start > 0 and not self:IsBlocked(name) then
+                    if duration > DEFAULT_RETAIL_GCD_DURATION_S then
+                        -- print("CoolLine: Adding cooldown for pet action:", name, "Texture:", texture, "Start:", start, "Duration:", duration)
+                        NewCooldownClassic(name, texture, start + duration, false, nil, "pet")
                     end
                 else
-                    ClearCooldown(nil, name)
+                    ClearCooldown(nil, name, "pet")
                 end
             end
         end
@@ -723,7 +737,7 @@ end
 
 ------------------------------
 function CoolLine:UNIT_PET()
-    ------------------------------
+------------------------------
     if UnitExists("pet") and not HasPetUI() then
         self:RegisterEvent("PET_BAR_UPDATE_COOLDOWN")
     else
@@ -734,19 +748,21 @@ end
 local GetActionCooldown, HasAction = GetActionCooldown, HasAction
 ---------------------------------------------
 function CoolLine:ACTIONBAR_UPDATE_COOLDOWN()
-    -- used only for vehicles
-    ---------------------------------------------
+-- used only for vehicles
+---------------------------------------------
     for i = 1, 8 do
         local b = _G["OverrideActionBarButton" .. i]
         if b and HasAction(b.action) then
             local start, duration, enable = GetActionCooldown(b.action)
             if enable == 1 then
-                if start > 0 and not block[GetActionInfo(b.action)] then
-                    if duration > 3 then
-                        NewCooldown("vehicle" .. i, GetActionTexture(b.action), start + duration)
+                local _, actionID = GetActionInfo(b.action)
+                if start > 0 and not self:IsBlocked(nil, actionID) then
+                    if duration > DEFAULT_RETAIL_GCD_DURATION_S then
+                        NewCooldownClassic("vehicle" .. i, GetActionTexture(b.action), start + duration,
+                            false, nil, "vehicle")
                     end
                 else
-                    ClearCooldown(nil, "vehicle" .. i)
+                    ClearCooldown(nil, "vehicle" .. i, "vehicle")
                 end
             end
         end
@@ -771,7 +787,8 @@ function CoolLine:UNIT_EXITED_VEHICLE()
     for i = 1, #cooldowns do
         local frame = cooldowns[i]
         if frame and strmatch(frame.name, "vehicle") then
-            ClearCooldown(nil, frame.name)
+            -- print("CoolLine: Clearing cooldown for vehicle action:", frame.name)
+            ClearCooldown(nil, frame.name, "vehicle")
         end
     end
 end
@@ -781,7 +798,7 @@ local failborder
 function CoolLine:UNIT_SPELLCAST_FAILED(unit, spell, id8)
     ----------------------------------------------------
     if IS_RETAIL_RELEASE then
-        spell = GetSpellInfo(id8) -- TEMPORARY, need to switch to using spell IDs throughout
+        spell = self:GetSpellInfoCompat(id8) -- TEMPORARY, need to switch to using spell IDs throughout
     end
 
     if #cooldowns == 0 then
@@ -790,7 +807,7 @@ function CoolLine:UNIT_SPELLCAST_FAILED(unit, spell, id8)
 
     for index, frame in pairs(cooldowns) do
         if frame.name == spell then
-            if frame.endtime - GetTime() > 1 then
+            if (frame.endtime and frame.endtime - GetTime() > 1) or frame.remaining_duration and frame.remaining_duration > 1 then
                 if not failborder then
                     failborder = CreateFrame("Frame", nil, CoolLine.border, AddonBackdropTemplate)
                     failborder:SetBackdrop(iconback)
@@ -811,291 +828,6 @@ function CoolLine:UNIT_SPELLCAST_FAILED(unit, spell, id8)
                 failborder:Show()
             end
             break
-        end
-    end
-end
-
-local CoolLineDD, Set
-local info = { }
-
-function ShowOptions(a1)
-    if type(a1) == "string" and a1 ~= "" and a1 ~= "menu" and a1 ~= "options" and a1 ~= "help" then
-        if strmatch(a1, "|H") then
-            a1 = strmatch(a1, "|h%[(.+)%]|h")
-        end
-        if a1 then
-            if block[a1] then
-                block[a1] = nil
-                print("|cff88ffffCool|r|cff88ff88Line|r: |cffffff00" .. a1 .. "|r removed from filter.")
-            else
-                block[a1] = true
-                print("|cff88ffffCool|r|cff88ff88Line|r: |cffffff00" .. a1 .. "|r added to filter.")
-            end
-        end
-        return
-    end
-
-    if not CoolLineDD then
-        CoolLineDD             = CreateFrame("Frame", "CoolLineDD", UIParent)
-        CoolLineDD.displayMode = "MENU"
-
-        Set                    = function(b, a1)
-            if a1 == "unlock" then
-                if not CoolLine.resizer then
-                    CoolLine:SetMovable(true)
-                    CoolLine:SetResizable(true)
-                    CoolLine:RegisterForDrag("LeftButton")
-                    CoolLine:SetScript("OnMouseUp", function(this, a1)
-                        if a1 == "RightButton" then
-                            ShowOptions()
-                        end
-                    end)
-                    CoolLine:SetScript("OnDragStart", function(this)
-                        this:StartMoving()
-                    end)
-                    CoolLine:SetScript("OnDragStop", function(this)
-                        this:StopMovingOrSizing()
-                        local x, y   = this:GetCenter()
-                        local ux, uy = UIParent:GetCenter()
-                        db.x, db.y   = floor(x - ux + 0.5), floor(y - uy + 0.5)
-                        this:ClearAllPoints()
-                        updatelook()
-                    end)
-
-                    CoolLine:SetMinResize(6, 6)
-                    CoolLine.resizer = CreateFrame("Button", nil, CoolLine.border, "UIPanelButtonTemplate")
-                    local resize     = CoolLine.resizer
-                    resize:SetWidth(8)
-                    resize:SetHeight(8)
-                    resize:SetPoint("BOTTOMRIGHT", CoolLine, "BOTTOMRIGHT", 2, -2)
-                    resize:SetScript("OnMouseDown", function(this)
-                        CoolLine:StartSizing("BOTTOMRIGHT")
-                    end)
-                    resize:SetScript("OnMouseUp", function(this)
-                        CoolLine:StopMovingOrSizing()
-                        db.w, db.h = floor(CoolLine:GetWidth() + 0.5), floor(CoolLine:GetHeight() + 0.5)
-                        updatelook()
-                    end)
-                end
-                if not CoolLine.unlock then
-                    CoolLine.unlock = true
-                    CoolLine:EnableMouse(true)
-                    CoolLine.resizer:Show()
-                    CoolLine:SetAlpha(db.activealpha)
-                    print("CoolLine - drag frame to reposition or drag red corner to resize")
-                else
-                    CoolLine.unlock = nil
-                    CoolLine:EnableMouse(false)
-                    CoolLine.resizer:Hide()
-                    OnUpdate(CoolLine, 2)
-                end
-            elseif a1 then
-                if a1 == "vertical" then
-                    local pw, ph = db.w, db.h
-                    db.w, db.h   = ph, pw
-                elseif a1 == "resetall" then
-                    CoolLineCharDB, CoolLineDB = nil, nil
-                    return ReloadUI()
-                end
-                db[a1] = not db[a1]
-                if a1 == "perchar" then
-                    if db.perchar then
-                        CoolLineCharDB = CoolLineCharDB or CoolLineDB
-                    else
-                        CoolLineCharDB = nil
-                    end
-                    ReloadUI()
-                end
-                updatelook()
-            end
-        end
-
-        local function SetSelect(b, a1)
-            db[a1]           = tonumber(b.value) or b.value
-            local level, num = strmatch(b:GetName(), "DropDownList(%d+)Button(%d+)")
-            level, num       = tonumber(level) or 0, tonumber(num) or 0
-            for i = 2, level do
-                for j = 1, UIDROPDOWNMENU_MAXBUTTONS do
-                    local check = _G["DropDownList" .. i .. "Button" .. j .. "Check"]
-                    if check and i == level and j == num then
-                        check:Show()
-                    elseif b then
-                        check:Hide()
-                    end
-                end
-            end
-            updatelook()
-        end
-
-        local function SetColor(a1)
-            local dbc = db[UIDROPDOWNMENU_MENU_VALUE]
-            if not dbc then
-                return
-            end
-            local r, g, b, a
-            if a1 then
-                local pv   = ColorPickerFrame.previousValues
-                r, g, b, a = pv.r, pv.g, pv.b, 1 - pv.opacity
-            else
-                r, g, b = ColorPickerFrame:GetColorRGB()
-                a       = 1 - OpacitySliderFrame:GetValue()
-            end
-            dbc.r, dbc.g, dbc.b, dbc.a = r, g, b, a
-            updatelook()
-        end
-
-        local function HideCheck(b)
-            if b and b.GetName and _G[b:GetName() .. "Check"] then
-                _G[b:GetName() .. "Check"]:Hide()
-            end
-        end
-
-        local function AddButton(lvl, text, keepshown)
-            info.text             = text
-            info.keepShownOnClick = keepshown
-            UIDropDownMenu_AddButton(info, lvl)
-            wipe(info)
-        end
-
-        local function AddToggle(lvl, text, value)
-            info.arg1 = value
-            info.func = Set
-            if value == "unlock" then
-                info.checked = CoolLine.unlock
-            else
-                info.checked = db[value]
-            end
-            AddButton(lvl, text, 1)
-        end
-
-        local function AddList(lvl, text, value)
-            info.value        = value
-            info.hasArrow     = true
-            info.func         = HideCheck
-            info.notCheckable = 1
-            AddButton(lvl, text, 1)
-        end
-
-        local function AddSelect(lvl, text, arg1, value)
-            info.arg1  = arg1
-            info.func  = SetSelect
-            info.value = value
-            if tonumber(value) and tonumber(db[arg1] or "blah") then
-                if floor(100 * tonumber(value)) == floor(100 * tonumber(db[arg1])) then
-                    info.checked = true
-                end
-            else
-                info.checked = db[arg1] == value
-            end
-            AddButton(lvl, text, 1)
-        end
-
-        local function AddColor(lvl, text, value)
-            local dbc = db[value]
-            if not dbc then
-                return
-            end
-            info.hasColorSwatch                                = true
-            info.hasOpacity                                    = 1
-            info.r, info.g, info.b, info.opacity               = dbc.r, dbc.g, dbc.b, 1 - (dbc.a or 0)
-            info.swatchFunc, info.opacityFunc, info.cancelFunc = SetColor, SetColor, SetColor
-            info.value                                         = value
-            info.func                                          = UIDropDownMenuButton_OpenColorPicker
-            info.notCheckable                                  = 1
-            AddButton(lvl, text, nil)
-        end
-
-        CoolLineDD.initialize = function(self, lvl)
-            if lvl == 1 then
-                info.isTitle      = true
-                info.notCheckable = 1
-                AddButton(lvl, "|cff88ffffCool|r|cff88ff88Line|r")
-                AddList(lvl, "Texture", "statusbar")
-                AddColor(lvl, "Texture Color", "bgcolor")
-                AddList(lvl, "Border", "border")
-                AddList(lvl, "Border Size", "bordersize") -- Added Options
-                AddList(lvl, "Border Inset", "borderinset") -- Added Options
-                AddColor(lvl, "Border Color", "bordercolor")
-                AddList(lvl, "Font", "font")
-                AddColor(lvl, "Font Color", "fontcolor")
-                AddList(lvl, "Font Size", "fontsize")
-                AddColor(lvl, "My Spell Color", "spellcolor")
-                AddColor(lvl, "Item/Pet Color", "nospellcolor")
-                AddList(lvl, "Inactive Opacity", "inactivealpha")
-                AddList(lvl, "Active Opacity", "activealpha")
-                AddList(lvl, "Icon Size", "iconplus")
-                AddList(lvl, "More", "More")
-                AddToggle(lvl, "Unlock", "unlock")
-            elseif lvl and lvl > 1 then
-                local sub = UIDROPDOWNMENU_MENU_VALUE
-                if sub == "font" or sub == "statusbar" or sub == "border" then
-                    local t      = smed:List(sub)
-                    local starti = 20 * (lvl - 2) + 1
-                    local endi   = 20 * (lvl - 1)
-                    for i = starti, endi do
-                        if not t[i] then
-                            break
-                        end
-                        AddSelect(lvl, t[i], sub, t[i])
-                        if i == endi and t[i + 1] then
-                            AddList(lvl, "More", sub)
-                        end
-                    end
-                elseif sub == "fontsize" then
-                    for i = 5, 12 do
-                        AddSelect(lvl, i, "fontsize", i)
-                    end
-                    for i = 14, 28, 2 do
-                        AddSelect(lvl, i, "fontsize", i)
-                    end
-                elseif sub == "bordersize" then
-                    -- Added options limits
-                    for i = 1, 16 do
-                        AddSelect(lvl, i, "bordersize", i)
-                    end
-                elseif sub == "borderinset" then
-                    -- Added options limits
-                    for i = -10, 10 do
-                        AddSelect(lvl, i, "borderinset", i)
-                    end
-                elseif sub == "inactivealpha" or sub == "activealpha" then
-                    for i = 0, 1, 0.1 do
-                        AddSelect(lvl, format("%.1f", i), sub, i)
-                    end
-                elseif sub == "iconplus" then
-                    for i = 0, 24, 2 do
-                        AddSelect(lvl, format("+%d", i), sub, i)
-                    end
-                elseif sub == "More" then
-                    AddToggle(lvl, "Vertical", "vertical")
-                    AddToggle(lvl, "Reverse", "reverse")
-                    AddToggle(lvl, "Disable Cast Fail", "hidefail")
-                    AddToggle(lvl, "Disable Equipped", "hideinv")
-                    AddToggle(lvl, "Disable Bags", "hidebag")
-                    AddToggle(lvl, "Disable Pet", "hidepet")
-                    AddToggle(lvl, "Save Per Char", "perchar")
-                    AddToggle(lvl, _G.RESET_TO_DEFAULT, "resetall")
-                end
-            end
-        end
-    end
-
-    ToggleDropDownMenu(1, nil, CoolLineDD, "cursor")
-end
-
-CONFIGMODE_CALLBACKS          = CONFIGMODE_CALLBACKS or {}
-CONFIGMODE_CALLBACKS.CoolLine = function(action, mode)
-    if action == "ON" then
-        if not CoolLineDD then
-            ShowOptions()
-            ToggleDropDownMenu(1, nil, CoolLineDD, "cursor")
-        end
-        if CoolLineDD and not CoolLine.unlock then
-            Set(nil, "unlock")
-        end
-    elseif action == "OFF" then
-        if CoolLineDD and CoolLine.unlock then
-            Set(nil, "unlock")
         end
     end
 end
