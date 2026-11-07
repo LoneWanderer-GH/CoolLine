@@ -49,19 +49,35 @@ function module:ApplyElvUIMedia()
     end
 end
 
-local function InsertOptions()
+function module:InsertOptions()
+    if not CoolLine.OptionsTable or not E.Options or not E.Options.args then
+        return
+    end
+
     E.Options.args.ElvUI_CoolLine = {
         order = 1000,
         type = "group",
         name = "CoolLine",
-        args = {
-            description = {
-                order = 1,
-                type = "description",
-                name = "Move CoolLine using ElvUI's Movers configuration.",
-            },
-        },
+        args = CoolLine.OptionsTable.args,
     }
+end
+
+function CoolLine:UpdateElvUIOptions()
+    module:InsertOptions()
+end
+
+function CoolLine:SyncElvUIMover()
+    local holder = E.CreatedMovers and E.CreatedMovers[moverName]
+    if not holder then
+        return
+    end
+
+    if E.SetMoverPoints then
+        E:SetMoverPoints(moverName, self)
+    end
+    if holder.mover then
+        holder.mover:SetSize(self:GetSize())
+    end
 end
 
 function module:CreateMover()
@@ -70,6 +86,7 @@ function module:CreateMover()
     if E.CreatedMovers[moverName] then
         CoolLine.ElvUIMoverCreated = true
         CoolLine:SetMovable(false)
+        CoolLine:SyncElvUIMover()
         return
     end
 
@@ -97,7 +114,9 @@ function module:PLAYER_ENTERING_WORLD()
 end
 
 if plugin then
-    plugin:RegisterPlugin(addonName, InsertOptions)
+    plugin:RegisterPlugin(addonName, function()
+        module:InsertOptions()
+    end)
 else
     CoolLineApp:Print("ElvUI's plugin library is unavailable; the CoolLine mover will work without its options entry.")
 end

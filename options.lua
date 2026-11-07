@@ -106,6 +106,9 @@ function CoolLine:SetUnlocked(unlocked)
     local wasUnlocked = self.unlock or false
     if wasUnlocked == unlocked then
         self.unlock = wasUnlocked
+        if self.SyncElvUIMover then
+            self:SyncElvUIMover()
+        end
         return
     end
 
@@ -159,6 +162,9 @@ function CoolLine:SetUnlocked(unlocked)
                 self:StopMovingOrSizing()
                 self.db.w, self.db.h = floor(self:GetWidth() + 0.5), floor(self:GetHeight() + 0.5)
                 self.updatelook()
+                if self.SyncElvUIMover then
+                    self:SyncElvUIMover()
+                end
             end)
         end
         self.unlockSetup = true
@@ -176,6 +182,9 @@ function CoolLine:SetUnlocked(unlocked)
             self.resizer:Hide()
         end
         self.updatelook()
+    end
+    if self.SyncElvUIMover then
+        self:SyncElvUIMover()
     end
 end
 
@@ -534,7 +543,11 @@ function CoolLine:SetupOptions()
         },
     }
 
+    self.OptionsTable = options
     AceConfig:RegisterOptionsTable("CoolLineOptions", options)
     blizzardOptionsFrame, blizzardOptionsCategoryID =
         AceConfigDialog:AddToBlizOptions("CoolLineOptions", "CoolLine")
+    if self.UpdateElvUIOptions then
+        self:UpdateElvUIOptions()
+    end
 end
