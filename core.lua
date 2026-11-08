@@ -129,7 +129,8 @@ function CoolLine:ADDON_LOADED(a1)
                               inactivealpha = 0.5,
                               activealpha   = 1.0,
                               block         = {  -- [spell or item name] = true,
-                                  [hearthstoneName or "Hearthstone"] = true, -- Hearthstone
+                                  ["6948"] = true, -- Hearthstone item ID
+                                  ["8690"] = true, -- Hearthstone use spell ID
                               },
                           }) do
             db[k] = (db[k] ~= nil and db[k]) or v
@@ -154,6 +155,10 @@ function CoolLine:ADDON_LOADED(a1)
         db.showConfigPreviews = false
     end
     block          = db.block
+    if block[hearthstoneName or "Hearthstone"] or block.Hearthstone then
+        block["6948"], block["8690"] = true, true
+        block[hearthstoneName or "Hearthstone"], block.Hearthstone = nil, nil
+    end
     CoolLine.db    = db
     
     CoolLineApp:Debug("Core", "Loaded CoolLine configuration")
@@ -331,11 +336,15 @@ function CoolLine:PLAYER_LOGIN()
     --@version-retail@
     self:RegisterEvent("PET_BATTLE_OPENING_START")
     self:RegisterEvent("PET_BATTLE_CLOSE")
-    self.PET_BATTLE_OPENING_START = self.Hide
-    self.PET_BATTLE_CLOSE         = self.Show
-    if C_PetBattles.IsInBattle() then
-        self:Hide()
+    self.PET_BATTLE_OPENING_START = function(frame)
+        frame.inPetBattle = true
+        frame:UpdateTimelineFrameVisibility()
     end
+    self.PET_BATTLE_CLOSE = function(frame)
+        frame.inPetBattle = false
+        frame:UpdateTimelineFrameVisibility()
+    end
+    self.inPetBattle = C_PetBattles.IsInBattle()
 
     self:RegisterUnitEvent("UNIT_ENTERED_VEHICLE", "player")
     if UnitHasVehicleUI("player") then
@@ -348,8 +357,16 @@ function CoolLine:PLAYER_LOGIN()
     if db.showConfigPreviews and CoolLine.SetConfigPreviews then
         CoolLine:SetConfigPreviews(true)
     end
-    self:SetAlpha((#cooldowns == 0 and db.inactivealpha) or db.activealpha)
+    self:UpdateTimelineFrameVisibility()
     self:RegisterEvent("PLAYER_LEAVING_WORLD")
+end
+
+function CoolLine:UpdateTimelineFrameVisibility()
+    if db.legacyTimeline ~= false and not self.inPetBattle then
+        self:Show()
+    else
+        self:Hide()
+    end
 end
 
 -----------------------------------------
@@ -411,7 +428,7 @@ local function SetupIcon(frame, position, tthrot, active, fl)
 end
 
 local function IsLegacyCooldown(frame)
-    return frame.source == "config" or (db.legacyTimeline ~= false and not frame.timelineEventID)
+    return frame.source == "config" or not frame.timelineEventID
 end
 
 local function OnUpdate(this, a1, ctime, dofl)
@@ -432,7 +449,7 @@ local function OnUpdate(this, a1, ctime, dofl)
     if not hasLegacyCooldowns then
         CoolLine:SetScript("OnUpdate", nil)
         CoolLine:SetAlpha(CoolLine.unlock and db.activealpha
-            or ((db.legacyTimeline == false or NativeTimelineEnabled()) and 0 or db.inactivealpha))
+            or (NativeTimelineEnabled() and 0 or db.inactivealpha))
         return
     end
 
@@ -507,7 +524,7 @@ local RefreshCooldownDisplay = function()
     else
         CoolLine:SetScript("OnUpdate", nil)
         CoolLine:SetAlpha(CoolLine.unlock and db.activealpha
-            or ((db.legacyTimeline == false or NativeTimelineEnabled()) and 0 or db.inactivealpha))
+            or (NativeTimelineEnabled() and 0 or db.inactivealpha))
     end
 end
 CoolLine.RefreshCooldownDisplay = RefreshCooldownDisplay
