@@ -56,6 +56,16 @@ local function optionSet(info, value)
     refresh()
 end
 
+local function legacyTimelineGet()
+    return CoolLine.db.legacyTimeline
+end
+
+local function legacyTimelineSet(_, value)
+    CoolLine.db.legacyTimeline = value
+    CoolLine:UpdateTimelineFrameVisibility()
+    refresh()
+end
+
 local function colorGet(info)
     local color = CoolLine.db[info[#info]]
     return color.r, color.g, color.b, color.a
@@ -210,9 +220,9 @@ function CoolLine:SetupOptions()
                     legacyTimeline = {
                         type = "toggle",
                         name = "Show CoolLine timeline",
-                        desc = "Show cooldowns in CoolLine's original bar when they are not routed to Blizzard's timeline.",
-                        get = optionGet,
-                        set = optionSet,
+                        desc = "Show or hide the CoolLine bar frame without changing cooldown routing.",
+                        get = legacyTimelineGet,
+                        set = legacyTimelineSet,
                         order = 1,
                     },
                     blizzardTimeline = {
