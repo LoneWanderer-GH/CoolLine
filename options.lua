@@ -3,8 +3,74 @@ local CoolLineApp = LibStub("AceAddon-3.0"):GetAddon(addonName)
 local CoolLine = CoolLineApp.MainFrame
 local AceConfig = LibStub("AceConfig-3.0")
 local AceConfigDialog = LibStub("AceConfigDialog-3.0")
+local AceConfigRegistry = LibStub("AceConfigRegistry-3.0")
 local smed = LibStub("LibSharedMedia-3.0")
 local blizzardOptionsFrame, blizzardOptionsCategoryID
+local requestedItems, requestedSpells = {}, {}
+
+local dataEvents = CreateFrame("Frame")
+dataEvents:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+if C_Spell and C_Spell.RequestLoadSpellData then
+    dataEvents:RegisterEvent("SPELL_DATA_LOAD_RESULT")
+end
+dataEvents:SetScript("OnEvent", function(_, event, id, success)
+    local requested = event == "GET_ITEM_INFO_RECEIVED" and requestedItems or requestedSpells
+    if requested[id] and success then
+        AceConfigRegistry:NotifyChange("CoolLineOptions")
+        AceConfigRegistry:NotifyChange("ElvUI")
+    end
+end)
+
+local function blacklistLabel(entry)
+    local id = tonumber(entry)
+    local identifier = id or entry
+    local spellName, _, spellIcon = CoolLine:GetSpellInfoCompat(identifier)
+    if spellName and not spellIcon then
+        spellIcon = CoolLine:GetSpellTextureCompat(identifier)
+    end
+    local itemName = CoolLine:GetItemNameCompat(identifier)
+    local itemIcon
+    if itemName then
+        if C_Item and C_Item.GetItemIconByID then
+            local getItemInfoInstant = C_Item.GetItemInfoInstant or _G.GetItemInfoInstant
+            local itemID = id or (getItemInfoInstant and getItemInfoInstant(identifier))
+            if itemID then
+                itemIcon = C_Item.GetItemIconByID(itemID)
+            end
+        elseif _G.GetItemIcon then
+            itemIcon = _G.GetItemIcon(identifier)
+        end
+    end
+
+    if id then
+        if not itemName and not requestedItems[id] then
+            requestedItems[id] = true
+            if C_Item and C_Item.RequestLoadItemDataByID then
+                C_Item.RequestLoadItemDataByID(id)
+            end
+        end
+        if not spellName and not requestedSpells[id] and C_Spell and C_Spell.RequestLoadSpellData then
+            requestedSpells[id] = true
+            C_Spell.RequestLoadSpellData(id)
+        end
+    end
+
+    local function formatEntry(name, icon, kind)
+        if not name then
+            return nil
+        end
+        local texture = icon and ("|T" .. tostring(icon) .. ":16:16|t ") or ""
+        return texture .. name .. (id and " (" .. kind .. ")" or "")
+    end
+
+    local spell = formatEntry(spellName, spellIcon, "Spell")
+    local item = formatEntry(itemName, itemIcon, "Item")
+    local label = spell and item and (spell .. " / " .. item) or spell or item
+    if id and label then
+        return label .. " [" .. tostring(entry) .. "]"
+    end
+    return label or tostring(entry)
+end
 
 local function mediaValues(kind)
     local values = {}
@@ -78,14 +144,16 @@ local function colorSet(info, red, green, blue, alpha)
 end
 
 function CoolLine:SetBlockedFilter(name, blocked)
-    if type(name) ~= "string" or name == "" then
+    if type(name) ~= "string" and type(name) ~= "number" then
         return
     end
-    name = name:match("^%s*(.-)%s*$")
-    local linkName = name:match("|h%[(.+)%]|h")
-    name = linkName or name
-    if name == "" then
-        return
+    if type(name) == "string" then
+        name = name:match("^%s*(.-)%s*$")
+        local linkName = name:match("|h%[(.+)%]|h")
+        name = linkName or name
+        if name == "" then
+            return
+        end
     end
     if blocked then
         self.db.block[name] = true
@@ -468,7 +536,7 @@ function CoolLine:SetupOptions()
                         values = function()
                             local values = {}
                             for name in pairs(CoolLine.db.block) do
-                                values[name] = name
+                                values[name] = blacklistLabel(name)
                             end
                             return values
                         end,

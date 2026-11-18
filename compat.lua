@@ -18,10 +18,11 @@ function CoolLine:GetSpellCooldownCompat(spellID)
         local info = C_Spell.GetSpellCooldown(spellID)
         local name, _, _, _, _, _, _ = CoolLine:GetSpellInfoCompat(spellID)
         if info then
-            local startTime = info.startTime or 0
-            local duration = info.duration or 0
-            local isEnabled = info.isEnabled or false
-            return startTime, duration, isEnabled and 1 or 0
+            local isEnabled = info.isEnabled
+            if not self:IsSecretValueCompat(isEnabled) then
+                isEnabled = isEnabled and 1 or 0
+            end
+            return info.startTime, info.duration, isEnabled
         end
     end
 end
@@ -34,11 +35,7 @@ function CoolLine:GetSpellChargesCompat(spellID)
     local info = C_Spell and C_Spell.GetSpellCharges and C_Spell.GetSpellCharges(spellID)
     if info then
         -- return info.currentCharges, info.maxCharges, info.cooldownStartTime, info.cooldownDuration
-        local start = info.cooldownStartTime or 0
-        local duration = info.cooldownDuration or 0
-        local currentCharges = info.currentCharges or 0
-        local maxCharges = info.maxCharges or 0
-        return currentCharges, maxCharges, start, duration
+        return info.currentCharges, info.maxCharges, info.cooldownStartTime, info.cooldownDuration
     end
 end
 

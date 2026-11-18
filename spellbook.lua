@@ -10,6 +10,7 @@ local MINIMUM_COOLDOWN_DURATION_MS = CoolLine.MINIMUM_COOLDOWN_DURATION_MS
 local spells = CoolLine.spells
 local chargespells = CoolLine.chargespells
 local cooldowns = CoolLine.cooldowns
+local estimatedDurations = { [BOOKTYPE_SPELL] = {}, [BOOKTYPE_PET] = {} }
 local GetTime = GetTime
 local ClearCooldown = function(...)
     return CoolLine.ClearCooldown(...)
@@ -41,6 +42,8 @@ do
                 spellID = resolvedSpellID or spellID
                 spellName = resolvedName or spellName
 
+                spells[btype][spellID] = nil
+                chargespells[btype][spellID] = nil
                 local _, maxCharges = CoolLine:GetSpellChargesCompat(spellID)
                 if CoolLine:IsSecretValueCompat(maxCharges) then
                     chargespells[btype][spellID] = spellName or tostring(spellID)
@@ -168,48 +171,159 @@ end
 
 do
     local elapsed = 0
-    local spellThrottle = CreateFrame("Frame", nil, CoolLine)
+    local spellThrottle = CreateFrame("Frame")
+    local secretCandidates = { [BOOKTYPE_SPELL] = {}, [BOOKTYPE_PET] = {} }
+    local secretConfirmationTime = MINIMUM_COOLDOWN_DURATION_MS / 1000
+    local OVERDUE_EXTENSION_MIN_S = 2
+    local CAST_BACKDATE_WINDOW_S = secretConfirmationTime + 3
+    local lastCasts = {}
 
     local function SyncTimelineEvent(frame)
         CoolLine:SyncTimelineEvent(frame)
     end
 
-    local function CheckSpellBookWithLegacyAPI(btype, checkSecretValues)
+    local function ShowSecretCooldown(btype, id, name, isCharge, isCooldownEvent)
+        local source = btype == BOOKTYPE_SPELL and "player" or "pet"
+        local candidates = secretCandidates[btype]
+        if CoolLine:IsBlocked(name, id) then
+            candidates[id] = nil
+            ClearCooldown(nil, name, source)
+            return
+        end
+
+        local existing
+        for _, frame in pairs(cooldowns) do
+            if frame.name == name and frame.source == source then
+                existing = frame
+                break
+            end
+        end
+        local spellAPI = C_Spell
+        local info
+        if spellAPI then
+            if isCharge and spellAPI.GetSpellCharges then
+                info = spellAPI.GetSpellCharges(id)
+            elseif not isCharge and spellAPI.GetSpellCooldown then
+                info = spellAPI.GetSpellCooldown(id)
+            end
+        end
+        if not info or CoolLine:IsSecretValueCompat(info.isActive)
+            or type(info.isActive) ~= "boolean" then
+            candidates[id] = nil
+            if existing then
+                NewCooldownClassic(name, existing.iconTexture, existing.endtime, btype == BOOKTYPE_SPELL,
+                    id, source, true)
+            end
+            --@debug@
+            CoolLine:LogCooldownDebug("secret-unknown:" .. source .. ":" .. tostring(id),
+                "Cannot determine whether " .. name .. " is active (ID " .. tostring(id) .. ").")
+            --@end-debug@
+            return
+        end
+        if not info.isActive then
+            candidates[id] = nil
+            ClearCooldown(nil, name, source)
+            return
+        end
+        local candidateStart
+        if not existing then
+            if not isCharge and isCooldownEvent and not CoolLine:IsSecretValueCompat(info.isOnGCD)
+                and info.isOnGCD == true then
+                candidates[id] = nil
+                spellThrottle:Show()
+                return
+            end
+            local now = GetTime()
+            local started = candidates[id]
+            if not started then
+                candidates[id] = now
+                spellThrottle:Show()
+                return
+            elseif now - started < secretConfirmationTime then
+                spellThrottle:Show()
+                return
+            end
+            candidateStart = started
+        end
+        candidates[id] = nil
+
+        local duration = estimatedDurations[btype][id]
+        if not duration then
+            local base = CoolLine:GetSpellBaseCooldownCompat(id)
+            if not CoolLine:IsSecretValueCompat(base) and type(base) == "number"
+                and base > MINIMUM_COOLDOWN_DURATION_MS then
+                duration = base / 1000
+            end
+        end
+        local endtime
+        if existing then
+            endtime = existing.endtime
+            local now = GetTime()
+            if endtime <= now then
+                -- The game still reports the cooldown as active, so the estimate was too short.
+                endtime = now + math.max(OVERDUE_EXTENSION_MIN_S, (duration or 30) * 0.25)
+            end
+        else
+            local cast = lastCasts[id]
+            if cast and cast <= candidateStart and candidateStart - cast <= CAST_BACKDATE_WINDOW_S then
+                candidateStart = cast
+            end
+            endtime = candidateStart + (duration or 30)
+        end
+        local durationObject
+        if isCharge and spellAPI.GetSpellChargeDuration then
+            durationObject = spellAPI.GetSpellChargeDuration(id)
+        elseif not isCharge and spellAPI.GetSpellCooldownDuration then
+            durationObject = spellAPI.GetSpellCooldownDuration(id, true)
+        end
+        local _, _, texture = CoolLine:GetSpellInfoCompat(id)
+        NewCooldownClassic(name, texture, endtime, btype == BOOKTYPE_SPELL, id, source, true, durationObject)
+        --@debug@
+        CoolLine:LogCooldownDebug("secret-legacy:" .. source .. ":" .. tostring(id),
+            "Tracking " .. name .. " with an estimated position; cooldown timing is secret (ID "
+                .. tostring(id) .. ").")
+        --@end-debug@
+    end
+
+    local function CheckSpellBookWithLegacyAPI(btype, checkSecretValues, isCooldownEvent)
         local source = btype == BOOKTYPE_SPELL and "player" or "pet"
         for id, name in pairs(spells[btype]) do
             local start, duration, enable = CoolLine:GetSpellCooldownCompat(id)
             if checkSecretValues and (CoolLine:IsSecretValueCompat(start)
-                or CoolLine:IsSecretValueCompat(duration) or CoolLine:IsSecretValueCompat(enable)) then
+                or CoolLine:IsSecretValueCompat(duration) or CoolLine:IsSecretValueCompat(enable)
+                or start == nil or duration == nil or enable == nil) then
                 
-                CoolLine:LogCooldownDebug("secret-legacy:" .. source .. ":" .. tostring(id),
-                    "Ignored " .. name .. " cooldown: start, duration, or enabled state is secret (ID "
-                        .. tostring(id) .. ", source " .. source .. ").")
-                
-                ClearCooldown(nil, name, source)
-            elseif enable == 1 and start > 0 and not CoolLine:IsBlocked(name, id)
-                and (not CoolLine.RuneCheck or CoolLine.RuneCheck(name, duration)) then
-                if duration > DEFAULT_RETAIL_GCD_DURATION_S then
-                    local _, _, texture = CoolLine:GetSpellInfoCompat(id)
-                    NewCooldownClassic(name, texture, start + duration, btype == BOOKTYPE_SPELL, id, source)
-                else
-                    for i = 1, #cooldowns do
-                        local frame = cooldowns[i]
-                        if frame.name == name then
-                            if frame.endtime > start + duration + 0.1 then
-                                frame.endtime = start + duration
-                                if duration > DEFAULT_RETAIL_GCD_DURATION_S then
-                                    SyncTimelineEvent(frame)
-                                else
-                                    frame.spellID = nil
-                                    SyncTimelineEvent(frame)
+                ShowSecretCooldown(btype, id, name, false, isCooldownEvent)
+            else
+                secretCandidates[btype][id] = nil
+                if enable == 1 and start and duration and start > 0 and not CoolLine:IsBlocked(name, id)
+                    and (not CoolLine.RuneCheck or CoolLine.RuneCheck(name, duration)) then
+                    if duration > DEFAULT_RETAIL_GCD_DURATION_S then
+                        if checkSecretValues then
+                            estimatedDurations[btype][id] = duration
+                        end
+                        local _, _, texture = CoolLine:GetSpellInfoCompat(id)
+                        NewCooldownClassic(name, texture, start + duration, btype == BOOKTYPE_SPELL, id, source)
+                    elseif not checkSecretValues then
+                        for i = 1, #cooldowns do
+                            local frame = cooldowns[i]
+                            if frame.name == name then
+                                if frame.endtime > start + duration + 0.1 then
+                                    frame.endtime = start + duration
+                                    if duration > DEFAULT_RETAIL_GCD_DURATION_S then
+                                        SyncTimelineEvent(frame)
+                                    else
+                                        frame.spellID = nil
+                                        SyncTimelineEvent(frame)
+                                    end
                                 end
+                                break
                             end
-                            break
                         end
                     end
+                else
+                    ClearCooldown(nil, name, source)
                 end
-            else
-                ClearCooldown(nil, name, source)
             end
         end
 
@@ -217,17 +331,21 @@ do
             local currentCharges, maxCharges, cooldownStart, cooldownDuration = CoolLine:GetSpellChargesCompat(id)
             if checkSecretValues and (CoolLine:IsSecretValueCompat(currentCharges)
                 or CoolLine:IsSecretValueCompat(maxCharges) or CoolLine:IsSecretValueCompat(cooldownStart)
-                or CoolLine:IsSecretValueCompat(cooldownDuration)) then
-                CoolLine:LogCooldownDebug("secret-legacy-charge:" .. source .. ":" .. tostring(id),
-                    "Ignored " .. name .. " charge cooldown: charge count or cooldown timing is secret (ID "
-                        .. tostring(id) .. ", source " .. source .. ").")
-                ClearCooldown(nil, name, source)
-            elseif cooldownStart and cooldownDuration and currentCharges < maxCharges
-                and not CoolLine:IsBlocked(name, id) then
-                local _, _, texture = CoolLine:GetSpellInfoCompat(id)
-                NewCooldownClassic(name, texture, cooldownStart + cooldownDuration, btype == BOOKTYPE_SPELL, id, source)
+                or CoolLine:IsSecretValueCompat(cooldownDuration) or currentCharges == nil
+                or maxCharges == nil or cooldownStart == nil or cooldownDuration == nil) then
+                ShowSecretCooldown(btype, id, name, true, isCooldownEvent)
             else
-                ClearCooldown(nil, name, source)
+                secretCandidates[btype][id] = nil
+                if cooldownStart and cooldownDuration and currentCharges and maxCharges and currentCharges < maxCharges
+                    and not CoolLine:IsBlocked(name, id) then
+                    if checkSecretValues then
+                        estimatedDurations[btype][id] = cooldownDuration
+                    end
+                    local _, _, texture = CoolLine:GetSpellInfoCompat(id)
+                    NewCooldownClassic(name, texture, cooldownStart + cooldownDuration, btype == BOOKTYPE_SPELL, id, source)
+                else
+                    ClearCooldown(nil, name, source)
+                end
             end
         end
     end
@@ -345,8 +463,8 @@ do
         CheckSpellBookWithLegacyAPI(btype, false)
     end
 
-    local function CheckSpellBookForever(btype)
-        CheckSpellBookWithLegacyAPI(btype, true)
+    local function CheckSpellBookForever(btype, isCooldownEvent)
+        CheckSpellBookWithLegacyAPI(btype, true, isCooldownEvent)
     end
 
     local checkSpellBookByClient = {
@@ -358,8 +476,18 @@ do
         or HAS_SECRET_VALUE_API and "forever"
         or "classic"
 
-    local function CheckSpellBook(btype)
-        checkSpellBookByClient[client](btype)
+    local function CheckSpellBook(btype, isCooldownEvent)
+        checkSpellBookByClient[client](btype, isCooldownEvent)
+    end
+
+    local function ScanSpellBooks(isCooldownEvent)
+        CheckSpellBook(BOOKTYPE_SPELL, isCooldownEvent)
+        if not CoolLine.db.hidepet and HasPetUI() then
+            CheckSpellBook(BOOKTYPE_PET, isCooldownEvent)
+        end
+        if client == "forever" then
+            CoolLine.RefreshCooldownDisplay()
+        end
     end
 
     spellThrottle:SetScript("OnUpdate", function(this, delta)
@@ -369,16 +497,32 @@ do
         end
         elapsed = 0
         this:Hide()
-        CheckSpellBook(BOOKTYPE_SPELL)
-        if not CoolLine.db.hidepet and HasPetUI() then
-            CheckSpellBook(BOOKTYPE_PET)
-        end
+        ScanSpellBooks(false)
     end)
 
     spellThrottle:Hide()
 
-    function CoolLine:SPELL_UPDATE_COOLDOWN()
+    function CoolLine:SPELL_UPDATE_COOLDOWN(isCooldownEvent)
+        if client == "forever" and isCooldownEvent then
+            spellThrottle:Hide()
+            ScanSpellBooks(true)
+        else
+            spellThrottle:Show()
+        end
+    end
+
+    function CoolLine:RequestCooldownRecheck()
         spellThrottle:Show()
+    end
+
+    -- Cast times are readable even when cooldown timing is secret, giving a better start estimate.
+    function CoolLine:UNIT_SPELLCAST_SUCCEEDED(_, _, spellID)
+        if type(spellID) == "number" and not CoolLine:IsSecretValueCompat(spellID) then
+            lastCasts[spellID] = GetTime()
+        end
+    end
+    if client == "forever" and CoolLine.RegisterUnitEvent then
+        CoolLine:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
     end
 
     function CoolLine:ENCOUNTER_TIMELINE_STATE_UPDATED()

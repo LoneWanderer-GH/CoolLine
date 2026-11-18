@@ -91,6 +91,8 @@ function CoolLine:SyncTimelineEvent(frame)
     local reason
     if not timelineEnabled then
         reason = timelineDisabledReason
+    elseif frame.estimated then
+        reason = "cooldown timing is estimated"
     elseif not sourceEnabled then
         reason = "this cooldown source is disabled in settings"
     elseif not frame.spellID then

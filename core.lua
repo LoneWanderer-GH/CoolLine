@@ -14,9 +14,14 @@ end
 
 local CoolLine = CoolLineApp.MainFrame
 CoolLine.IS_RETAIL_RELEASE = IS_RETAIL_RELEASE
+CoolLine.IS_FOREVER = build_toc_version >= 16000 and build_toc_version < 20000
 
 CoolLine:SetScript("OnEvent", function(this, event, ...)
-    this[event](this, ...)
+    if event == "SPELL_UPDATE_COOLDOWN" then
+        this[event](this, true)
+    else
+        this[event](this, ...)
+    end
 end)
 
 local smed                                                  = LibStub("LibSharedMedia-3.0")
@@ -328,6 +333,10 @@ function CoolLine:PLAYER_LOGIN()
     self:RegisterEvent("SPELL_UPDATE_COOLDOWN")
     self:RegisterEvent("SPELL_UPDATE_CHARGES")
     self.SPELL_UPDATE_CHARGES = self.SPELL_UPDATE_COOLDOWN
+    if self.IS_FOREVER then
+        self:RegisterEvent("PLAYER_REGEN_DISABLED")
+        self:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
     self:SPELL_UPDATE_COOLDOWN()
     if C_EncounterTimeline and C_EncounterTimeline.IsFeatureAvailable then
         self:RegisterEvent("ENCOUNTER_TIMELINE_STATE_UPDATED")
@@ -359,6 +368,20 @@ function CoolLine:PLAYER_LOGIN()
     end
     self:UpdateTimelineFrameVisibility()
     self:RegisterEvent("PLAYER_LEAVING_WORLD")
+end
+
+function CoolLine:PLAYER_REGEN_DISABLED()
+    self:SPELL_UPDATE_COOLDOWN()
+end
+
+function CoolLine:PLAYER_REGEN_ENABLED()
+    self:SPELL_UPDATE_COOLDOWN()
+    if not (db.hidebag and db.hideinv) then
+        self:BAG_UPDATE_COOLDOWN()
+    end
+    if not db.hidepet and UnitExists("pet") then
+        self:PET_BAR_UPDATE_COOLDOWN()
+    end
 end
 
 function CoolLine:UpdateTimelineFrameVisibility()
@@ -395,15 +418,19 @@ local function ClearCooldown(f, name, source)
     for i = 1, #cooldowns do
         local frame = cooldowns[i]
         if frame.name == name and (not source or frame.source == source) then
-            if SyncTimelineEvent then
-                frame.spellID = nil
-                SyncTimelineEvent(frame)
-            end
+            CoolLine:CancelTimelineEvent(frame)
             frame:Hide()
+            if frame.secretCooldown then
+                frame.secretCooldown:Hide()
+            end
+            if frame.estimateLabel then
+                frame.estimateLabel:Hide()
+            end
             frame.name    = nil
             frame.endtime = nil
             frame.remaining_duration = nil
             frame.source = nil
+            frame.estimated = nil
             tinsert(frames, tremove(cooldowns, i))
             break
         end
@@ -468,6 +495,13 @@ local function OnUpdate(this, a1, ctime, dofl)
         else
             --
         end
+        if frame.estimated and remain < 1 then
+            remain = 1
+            if (frame.recheckAt or 0) <= ctime and CoolLine.RequestCooldownRecheck then
+                frame.recheckAt = ctime + 0.5
+                CoolLine:RequestCooldownRecheck()
+            end
+        end
         if remain < 3 then
             if remain > 1 then
                 SetupIcon(frame, section * (remain + 1) * 0.5, 0.02, true, dofl)  -- 1 + (remain - 1) / 2
@@ -529,7 +563,7 @@ local RefreshCooldownDisplay = function()
 end
 CoolLine.RefreshCooldownDisplay = RefreshCooldownDisplay
 
-local function NewCooldownClassic(name, icon, endtime, isplayer, spellID, source)
+local function NewCooldownClassic(name, icon, endtime, isplayer, spellID, source, estimated, durationObject)
     if not name or not icon or not endtime then
         
         CoolLine:LogCooldownDebug("create:classic-invalid:" .. tostring(spellID or name),
@@ -547,7 +581,8 @@ local function NewCooldownClassic(name, icon, endtime, isplayer, spellID, source
         if existing_frame.name == name and existing_frame.source == source then
             frame = existing_frame
             break
-        elseif existing_frame.endtime == endtime and existing_frame.source == source then
+        elseif not CoolLine.IS_FOREVER and not estimated
+            and existing_frame.endtime == endtime and existing_frame.source == source then
             return
         -- ROBUSTNESS ? elseif existing_frame.remaining_duration == 0 then
         --     return
@@ -576,7 +611,42 @@ local function NewCooldownClassic(name, icon, endtime, isplayer, spellID, source
     frame.name, frame.endtime, frame.isplayer, frame.spellID, frame.iconTexture =
         name, endtime, isplayer, spellID, icon
     frame.source = source
+    frame.estimated = estimated or nil
     frame.icon:SetTexture(icon)
+    if estimated then
+        if not frame.estimateLabel then
+            frame.estimateLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            frame.estimateLabel:SetPoint("TOPLEFT", frame, "TOPLEFT")
+            frame.estimateLabel:SetText("?")
+        end
+        frame.estimateLabel:Show()
+        if durationObject then
+            if not frame.secretCooldown then
+                frame.secretCooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
+                frame.secretCooldown:SetAllPoints(frame)
+                frame.secretCooldown:SetDrawEdge(false)
+                frame.secretCooldown:SetDrawBling(false)
+                -- The estimated position and the game's exact countdown would disagree.
+                frame.secretCooldown:SetHideCountdownNumbers(true)
+                frame.secretCooldown:SetScript("OnCooldownDone", function()
+                    if CoolLine.RequestCooldownRecheck then
+                        CoolLine:RequestCooldownRecheck()
+                    end
+                end)
+            end
+            frame.secretCooldown:SetCooldownFromDurationObject(durationObject)
+            frame.secretCooldown:Show()
+        elseif frame.secretCooldown then
+            frame.secretCooldown:Hide()
+        end
+    else
+        if frame.estimateLabel then
+            frame.estimateLabel:Hide()
+        end
+        if frame.secretCooldown then
+            frame.secretCooldown:Hide()
+        end
+    end
     SyncTimelineEvent(frame)
 
     local c = db[isplayer and "spellcolor" or "nospellcolor"]
@@ -652,6 +722,13 @@ local function NewCooldownRetail(name, icon, remaining_duration, isplayer, spell
     f.name, f.remaining_duration, f.isplayer, f.spellID, f.iconTexture =
         name, remaining_duration, isplayer, spellID, icon
     f.source = source
+    f.estimated = nil
+    if f.estimateLabel then
+        f.estimateLabel:Hide()
+    end
+    if f.secretCooldown then
+        f.secretCooldown:Hide()
+    end
     f.cooldownSampleTime = GetTime()
     f.icon:SetTexture(icon)
     SyncTimelineEvent(f)
@@ -664,6 +741,17 @@ end
 CoolLine.NewCooldownClassic, CoolLine.ClearCooldown, CoolLine.NewCooldownRetail = NewCooldownClassic, ClearCooldown, NewCooldownRetail
 CoolLine.IconBackdrop = iconback
 
+local function CooldownTimingReadable(source, start, duration, enabled)
+    if CoolLine:IsSecretValueCompat(start) or CoolLine:IsSecretValueCompat(duration)
+        or CoolLine:IsSecretValueCompat(enabled) then
+        --@debug@
+        CoolLine:LogCooldownDebug("secret-" .. source,
+            "Cannot update " .. source .. " cooldown: timing or enabled state is secret.")
+        --@end-debug@
+        return false
+    end
+    return true
+end
 
 do
     -- scans equipments and bags for item cooldowns
@@ -681,7 +769,8 @@ do
         -- scan equipped objects
         for i = 1, (db.hideinv and 0) or 18 do
             local start, duration, enable = GetInventoryItemCooldown("player", i)
-            if enable == 1 then
+            if CooldownTimingReadable("equipped-item", start, duration, enable)
+                and enable == 1 and start and duration then
                 --local name = GetItemInfo(GetInventoryItemLink("player", i))
                 local link = GetInventoryItemLink("player", i)
                 local name = link and GetItemInfo(link)
@@ -704,7 +793,8 @@ do
             local numSlots = GetContainerNumSlots(i) or 0
             for j = 1, numSlots do
                 local start, duration, enable = CoolLine:GetContainerItemCooldownCompat(i, j)
-                if enable == 1 then
+                if CooldownTimingReadable("bag-item", start, duration, enable)
+                    and enable == 1 and start and duration then
                     --local name = GetItemInfo(GetContainerItemLink(i, j))
                     local link = GetContainerItemLink(i, j)
                     local name = link and GetItemInfo(link)
@@ -731,7 +821,8 @@ function CoolLine:PET_BAR_UPDATE_COOLDOWN()
 -------------------------------------------
     for i = 1, 10 do
         local start, duration, enable = GetPetActionCooldown(i)
-        if enable == 1 then
+        if CooldownTimingReadable("pet-action", start, duration, enable)
+            and enable == 1 and start and duration then
             local name, _, texture
             if IS_RETAIL_RELEASE then
                 name, texture = GetPetActionInfo(i)
@@ -771,7 +862,8 @@ function CoolLine:ACTIONBAR_UPDATE_COOLDOWN()
         local b = _G["OverrideActionBarButton" .. i]
         if b and HasAction(b.action) then
             local start, duration, enable = GetActionCooldown(b.action)
-            if enable == 1 then
+            if CooldownTimingReadable("vehicle-action", start, duration, enable)
+                and enable == 1 and start and duration then
                 local _, actionID = GetActionInfo(b.action)
                 if start > 0 and not self:IsBlocked(nil, actionID) then
                     if duration > DEFAULT_RETAIL_GCD_DURATION_S then
