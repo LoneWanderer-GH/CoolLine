@@ -275,6 +275,51 @@ function CoolLine:SetupOptions()
         return not (C_EncounterTimeline and C_EncounterTimeline.IsFeatureAvailable
             and C_EncounterTimeline.IsFeatureAvailable())
     end
+
+    -- Thresholds of the cooldown estimation (defined in core.lua). Only changed values are saved in db.expert.
+    local function expertGet(info)
+        return CoolLine:GetExpert(info[#info])
+    end
+    local function expertSet(info, value)
+        CoolLine.db.expert = CoolLine.db.expert or {}
+        CoolLine.db.expert[info[#info]] = value
+        refresh()
+    end
+    local expertArgs = {
+        description = {
+            type = "description",
+            name = "Thresholds used when the game hides a cooldown's timing (for example in combat), so CoolLine "
+                .. "has to estimate it. The defaults suit most players; they have no effect on cooldowns that the "
+                .. "game reports exactly.",
+            order = 0,
+        },
+    }
+    for index, key in ipairs(CoolLine.EXPERT_ORDER or {}) do
+        local setting = CoolLine.EXPERT_SETTINGS[key]
+        expertArgs[key] = {
+            type = "range",
+            name = setting.name,
+            desc = setting.desc .. " Default: " .. tostring(setting.default) .. ".",
+            min = setting.min,
+            max = setting.max,
+            step = setting.step,
+            width = "full",
+            get = expertGet,
+            set = expertSet,
+            order = index,
+        }
+    end
+    expertArgs.reset = {
+        type = "execute",
+        name = "Reset expert settings",
+        func = function()
+            CoolLine.db.expert = nil
+            refresh()
+            AceConfigRegistry:NotifyChange("CoolLineOptions")
+            AceConfigRegistry:NotifyChange("ElvUI")
+        end,
+        order = 100,
+    }
     local options = {
         type = "group",
         name = "CoolLine",
@@ -617,6 +662,12 @@ function CoolLine:SetupOptions()
                         order = 8,
                     },
                 },
+            },
+            expert = {
+                type = "group",
+                name = "Expert",
+                order = 5,
+                args = expertArgs,
             },
         },
     }

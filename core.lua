@@ -14,7 +14,16 @@ end
 
 local CoolLine = CoolLineApp.MainFrame
 CoolLine.IS_RETAIL_RELEASE = IS_RETAIL_RELEASE
-CoolLine.IS_FOREVER = build_toc_version >= 16000 and build_toc_version < 20000
+
+-- Single source of truth for the client family. "retail" and "forever" can return secret values;
+-- "forever" also covers any non-retail client that exposes issecretvalue, so the secret-value
+-- handling and the Forever-only behaviors (combat snapshots, shared-end-time dedup) cannot diverge.
+local IS_FOREVER_BUILD = build_toc_version >= 16000 and build_toc_version < 20000
+local HAS_SECRET_VALUE_API = type(_G.issecretvalue) == "function"
+CoolLine.CLIENT = (IS_RETAIL_RELEASE and "retail")
+    or ((IS_FOREVER_BUILD or HAS_SECRET_VALUE_API) and "forever")
+    or "classic"
+CoolLine.IS_FOREVER = CoolLine.CLIENT == "forever"
 
 CoolLine:SetScript("OnEvent", function(this, event, ...)
     if event == "SPELL_UPDATE_COOLDOWN" then
@@ -69,9 +78,58 @@ CoolLine.BOOKTYPE_SPELL, CoolLine.BOOKTYPE_PET = BOOKTYPE_SPELL, BOOKTYPE_PET
 local MINIMUM_COOLDOWN_DURATION_MS                          = 2499
 local DEFAULT_RETAIL_GCD_DURATION_S                         = 1.5 -- 0.749
 local DEFAULT_RETAIL_MAX_DURATION_S                         = 3601
+-- An estimated cooldown that the game has not confirmed for this long after its estimated end is dropped.
+local ESTIMATE_STALE_S                                      = 20
+-- A cooldown routed to Blizzard's timeline is dropped this long after its end if no scan has cleared it.
+local EXPIRED_GRACE_S                                       = 1
 CoolLine.MINIMUM_COOLDOWN_DURATION_MS = MINIMUM_COOLDOWN_DURATION_MS
 CoolLine.DEFAULT_RETAIL_GCD_DURATION_S = DEFAULT_RETAIL_GCD_DURATION_S
 CoolLine.DEFAULT_RETAIL_MAX_DURATION_S = DEFAULT_RETAIL_MAX_DURATION_S
+
+-- Expert settings, stored in db.expert[key]. Only values that differ from the default are saved; a missing or
+-- invalid value falls back to the default and the others are clamped to [min, max]. They only matter for
+-- cooldowns whose timing the game hides (restricted values), where the bar has to estimate.
+local EXPERT_SETTINGS = {
+    hold = {
+        default = 1, min = 0, max = 3, step = 0.1, name = "Estimate hold point (s)",
+        desc = "An estimated cooldown stops at this remaining time while the game still reports it as active. "
+            .. "Lower values let the icon get closer to the end of the bar before it waits.",
+    },
+    confirm = {
+        default = 2.5, min = 0.5, max = 5, step = 0.1, name = "Confirmation delay (s)",
+        desc = "How long a new restricted cooldown must stay active before it is shown. It filters out the "
+            .. "global cooldown, so values below about 1.5 can display short global-cooldown blips.",
+    },
+    orphan = {
+        default = 5, min = 1, max = 15, step = 1, name = "Drop unconfirmed icons after (s)",
+        desc = "An estimated icon is removed this long after its estimated end when the game no longer says "
+            .. "whether the cooldown is active (for example after a talent change).",
+    },
+    fallback = {
+        default = 30, min = 5, max = 300, step = 1, name = "Fallback duration (s)",
+        desc = "Estimated duration of a restricted cooldown that was never seen with readable timing, when "
+            .. "its base cooldown is unknown. Base cooldowns ignore talents and haste.",
+    },
+    recheck = {
+        default = 0.5, min = 0.1, max = 2, step = 0.1, name = "Recheck interval (s)",
+        desc = "How often an exhausted estimate asks the game again whether the cooldown is over. Lower values "
+            .. "remove icons sooner but scan the spellbook more often.",
+    },
+}
+CoolLine.EXPERT_SETTINGS = EXPERT_SETTINGS
+CoolLine.EXPERT_ORDER = { "hold", "confirm", "orphan", "fallback", "recheck" }
+
+function CoolLine:GetExpert(key)
+    local setting = EXPERT_SETTINGS[key]
+    if not setting then
+        return nil
+    end
+    local value = db and db.expert and db.expert[key]
+    if type(value) ~= "number" or value ~= value then
+        return setting.default
+    end
+    return math.min(setting.max, math.max(setting.min, value))
+end
 
 local SetValue, updatelook, createfs, RuneCheck
 local RefreshCooldownDisplay
@@ -307,9 +365,6 @@ function CoolLine:ADDON_LOADED(a1)
 
         for i = 1, #cooldowns do
             cooldowns[i]:SetSize(iconsize, iconsize)
-            if SyncTimelineEvent then
-                SyncTimelineEvent(cooldowns[i])
-            end
         end
         if RefreshCooldownDisplay then
             RefreshCooldownDisplay()
@@ -333,9 +388,13 @@ function CoolLine:PLAYER_LOGIN()
     self:RegisterEvent("SPELL_UPDATE_COOLDOWN")
     self:RegisterEvent("SPELL_UPDATE_CHARGES")
     self.SPELL_UPDATE_CHARGES = self.SPELL_UPDATE_COOLDOWN
-    if self.IS_FOREVER then
+    if self.CLIENT ~= "classic" then
+        -- Cooldown timing can turn secret when a restriction starts; keep exact snapshots around that moment.
         self:RegisterEvent("PLAYER_REGEN_DISABLED")
         self:RegisterEvent("PLAYER_REGEN_ENABLED")
+        if C_RestrictedActions and C_RestrictedActions.GetAddOnRestrictionState then
+            pcall(self.RegisterEvent, self, "ADDON_RESTRICTION_STATE_CHANGED")
+        end
     end
     self:SPELL_UPDATE_COOLDOWN()
     if C_EncounterTimeline and C_EncounterTimeline.IsFeatureAvailable then
@@ -371,17 +430,27 @@ function CoolLine:PLAYER_LOGIN()
 end
 
 function CoolLine:PLAYER_REGEN_DISABLED()
-    self:SPELL_UPDATE_COOLDOWN()
+    self:ScanCooldownsNow()
 end
 
 function CoolLine:PLAYER_REGEN_ENABLED()
-    self:SPELL_UPDATE_COOLDOWN()
+    self:ScanCooldownsNow()
     if not (db.hidebag and db.hideinv) then
         self:BAG_UPDATE_COOLDOWN()
     end
     if not db.hidepet and UnitExists("pet") then
         self:PET_BAR_UPDATE_COOLDOWN()
     end
+end
+
+-- "Activating" is dispatched while values are still readable, just before the restriction is enforced:
+-- take a last exact snapshot. "Inactive" means timings are readable again: reconcile estimates at once.
+function CoolLine:ADDON_RESTRICTION_STATE_CHANGED(_, state)
+    local states = Enum and Enum.AddOnRestrictionState
+    if states and state == states.Active then
+        return
+    end
+    self:ScanCooldownsNow()
 end
 
 function CoolLine:UpdateTimelineFrameVisibility()
@@ -431,6 +500,9 @@ local function ClearCooldown(f, name, source)
             frame.remaining_duration = nil
             frame.source = nil
             frame.estimated = nil
+            frame.confirmedAt = nil
+            frame.pinned = nil
+            frame.pinOffset = nil
             tinsert(frames, tremove(cooldowns, i))
             break
         end
@@ -448,14 +520,47 @@ end
 local function SetupIcon(frame, position, tthrot, active, fl)
     throt    = (throt < tthrot and throt) or tthrot
     isactive = active or isactive
-    if fl then
+    -- Icons waiting at the hold point keep a stable order: shuffling them would make overlapping icons blink.
+    if fl and not frame.pinned then
         frame:SetFrameLevel(random(1, 5) * 2 + 2)
     end
-    SetValue(frame, position)
+    SetValue(frame, position + (frame.pinOffset or 0))
 end
 
 local function IsLegacyCooldown(frame)
     return frame.source == "config" or not frame.timelineEventID
+end
+
+local function FrameEndTime(frame, ctime)
+    if frame.endtime then
+        return frame.endtime
+    end
+    if frame.remaining_duration then
+        return (frame.cooldownSampleTime or ctime) + frame.remaining_duration
+    end
+end
+
+-- Frames routed to Blizzard's timeline have no OnUpdate-driven display, so nothing else would notice that
+-- their cooldown ended if the scan that reports it never comes (for example after a loading screen).
+local function SweepExpiredCooldowns(ctime)
+    for i = #cooldowns, 1, -1 do
+        local frame = cooldowns[i]
+        local endTime = FrameEndTime(frame, ctime)
+        if endTime and frame.source ~= "config" then
+            -- Exact bar frames are removed by the display loop; only estimates and native ones need this.
+            local limit
+            if frame.estimated then
+                limit = ESTIMATE_STALE_S
+                -- Scans keep confirmedAt fresh while the game reports the cooldown as active.
+                endTime = math.max(endTime, frame.confirmedAt or 0)
+            elseif not IsLegacyCooldown(frame) then
+                limit = EXPIRED_GRACE_S
+            end
+            if limit and ctime - endTime > limit then
+                ClearCooldown(frame)
+            end
+        end
+    end
 end
 
 local function OnUpdate(this, a1, ctime, dofl)
@@ -464,6 +569,9 @@ local function OnUpdate(this, a1, ctime, dofl)
         return
     end
     elapsed = 0
+    ctime = ctime or GetTime()
+
+    SweepExpiredCooldowns(ctime)
 
     local hasLegacyCooldowns = false
     for _, frame in pairs(cooldowns) do
@@ -474,18 +582,22 @@ local function OnUpdate(this, a1, ctime, dofl)
     end
 
     if not hasLegacyCooldowns then
-        CoolLine:SetScript("OnUpdate", nil)
+        if #cooldowns == 0 then
+            CoolLine:SetScript("OnUpdate", nil)
+        end
+        throt = 1.5
         CoolLine:SetAlpha(CoolLine.unlock and db.activealpha
             or (NativeTimelineEnabled() and 0 or db.inactivealpha))
         return
     end
 
-    ctime = ctime or GetTime()
     if ctime > ptime then
         dofl, ptime = true, ctime + 0.4
     end
     isactive, throt = false, 1.5
 
+    local hold = CoolLine:GetExpert("hold")
+    local pinnedCount = 0
     for index, frame in pairs(cooldowns) do
         local remain
         if frame.endtime then
@@ -493,14 +605,24 @@ local function OnUpdate(this, a1, ctime, dofl)
         elseif frame.remaining_duration then
             remain = frame.remaining_duration - (ctime - (frame.cooldownSampleTime or ctime))
         else
-            --
+            remain = -2
         end
-        if frame.estimated and remain < 1 then
-            remain = 1
+        local pinned = false
+        if frame.estimated and remain < hold then
+            -- The estimate is exhausted but the game still reports the cooldown: wait at the hold point
+            -- (fanned out so several waiting icons stay visible) until a scan says it is over.
+            remain, pinned = hold, true
             if (frame.recheckAt or 0) <= ctime and CoolLine.RequestCooldownRecheck then
-                frame.recheckAt = ctime + 0.5
+                frame.recheckAt = ctime + CoolLine:GetExpert("recheck")
                 CoolLine:RequestCooldownRecheck()
             end
+        end
+        frame.pinned = pinned
+        if pinned then
+            frame.pinOffset = pinnedCount * iconsize * 0.75
+            pinnedCount = pinnedCount + 1
+        else
+            frame.pinOffset = nil
         end
         if remain < 3 then
             if remain > 1 then
@@ -532,6 +654,12 @@ local function OnUpdate(this, a1, ctime, dofl)
         else
             SetupIcon(frame, 6 * section, 2, false, dofl)
         end
+        if pinned then
+            -- The end-of-bar animation resizes and fades icons; a waiting icon must stay normal-sized and opaque.
+            frame:SetWidth(iconsize)
+            frame:SetHeight(iconsize)
+            frame:SetAlpha(1)
+        end
     end
 
     if not isactive and not CoolLine.unlock then
@@ -539,10 +667,10 @@ local function OnUpdate(this, a1, ctime, dofl)
     end
 end
 
-local RefreshCooldownDisplay = function()
+RefreshCooldownDisplay = function()
     local hasLegacyCooldowns = false
     for _, frame in pairs(cooldowns) do
-        SyncTimelineEvent(frame)
+        CoolLine:SyncTimelineEvent(frame)
         if IsLegacyCooldown(frame) then
             frame:Show()
             hasLegacyCooldowns = true
@@ -556,7 +684,8 @@ local RefreshCooldownDisplay = function()
         CoolLine:SetAlpha(db.activealpha)
         OnUpdate(CoolLine, 2)
     else
-        CoolLine:SetScript("OnUpdate", nil)
+        -- Native-only cooldowns keep a slow OnUpdate for their expiry sweep.
+        CoolLine:SetScript("OnUpdate", #cooldowns > 0 and OnUpdate or nil)
         CoolLine:SetAlpha(CoolLine.unlock and db.activealpha
             or (NativeTimelineEnabled() and 0 or db.inactivealpha))
     end
@@ -612,6 +741,9 @@ local function NewCooldownClassic(name, icon, endtime, isplayer, spellID, source
         name, endtime, isplayer, spellID, icon
     frame.source = source
     frame.estimated = estimated or nil
+    if not estimated then
+        frame.confirmedAt = nil
+    end
     frame.icon:SetTexture(icon)
     if estimated then
         if not frame.estimateLabel then
@@ -823,11 +955,10 @@ function CoolLine:PET_BAR_UPDATE_COOLDOWN()
         local start, duration, enable = GetPetActionCooldown(i)
         if CooldownTimingReadable("pet-action", start, duration, enable)
             and enable == 1 and start and duration then
-            local name, _, texture
-            if IS_RETAIL_RELEASE then
-                name, texture = GetPetActionInfo(i)
-            else
-                name, _, texture = GetPetActionInfo(i)
+            -- Every declared client returns name, texture, isToken (checked in each client's PetActionBar source).
+            local name, texture, isToken = GetPetActionInfo(i)
+            if isToken and texture then
+                texture = _G[texture] or texture
             end
             if name then
                 if start > 0 and not self:IsBlocked(name) then
@@ -893,10 +1024,10 @@ end
 function CoolLine:UNIT_EXITED_VEHICLE()
     -----------------------------------------
     self:UnregisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
-    for i = 1, #cooldowns do
+    -- Backwards: ClearCooldown removes the frame from the list being walked.
+    for i = #cooldowns, 1, -1 do
         local frame = cooldowns[i]
-        if frame and strmatch(frame.name, "vehicle") then
-            -- print("CoolLine: Clearing cooldown for vehicle action:", frame.name)
+        if frame and frame.source == "vehicle" then
             ClearCooldown(nil, frame.name, "vehicle")
         end
     end
@@ -904,16 +1035,16 @@ end
 
 local failborder
 ----------------------------------------------------
-function CoolLine:UNIT_SPELLCAST_FAILED(unit, spell, id8)
+-- Every declared client sends (unit, castGUID, spellID): the second argument is a GUID, never a spell name.
+function CoolLine:UNIT_SPELLCAST_FAILED(unit, castGUID, spellID)
     ----------------------------------------------------
-    if IS_RETAIL_RELEASE then
-        spell = self:GetSpellInfoCompat(id8) -- TEMPORARY, need to switch to using spell IDs throughout
-    end
-
-    if #cooldowns == 0 then
+    if #cooldowns == 0 or type(spellID) ~= "number" then
         return
     end
-
+    local spell = self:GetSpellInfoCompat(spellID)
+    if not spell then
+        return
+    end
     for index, frame in pairs(cooldowns) do
         if frame.name == spell then
             if (frame.endtime and frame.endtime - GetTime() > 1) or frame.remaining_duration and frame.remaining_duration > 1 then
