@@ -1,0 +1,52 @@
+-- The client family is resolved once in core.lua and shared by every other file.
+local function newFrame()
+    local frame = { scripts = {} }
+    return setmetatable(frame, {
+        __index = function(_, key)
+            if key == "SetScript" then
+                return function(target, event, handler) target.scripts[event] = handler end
+            end
+            return function() end
+        end,
+    })
+end
+
+local media = { Fetch = function() return "test" end, IsValid = function() return true end }
+floor = math.floor
+
+local function clientFor(build, hasSecretApi, mainlineProject)
+    local frame = newFrame()
+    LibStub = function(name)
+        if name == "AceAddon-3.0" then
+            return { GetAddon = function() return { MainFrame = frame, Debug = function() end } end }
+        end
+        return media
+    end
+    GetBuildInfo = function() return nil, nil, nil, build end
+    issecretvalue = hasSecretApi and function() return false end or nil
+    WOW_PROJECT_MAINLINE, WOW_PROJECT_CLASSIC = 1, 2
+    WOW_PROJECT_ID = mainlineProject and 1 or 2
+    assert(loadfile("core.lua"))("CoolLine")
+    return frame.CLIENT, frame.IS_FOREVER, frame.IS_RETAIL_RELEASE
+end
+
+local client, isForever, isRetail = clientFor(120105, true, true)
+assert(client == "retail" and not isForever and isRetail, "retail")
+
+client, isForever = clientFor(16001, true, false)
+assert(client == "forever" and isForever, "forever")
+
+client, isForever = clientFor(16001, false, false)
+assert(client == "forever" and isForever, "forever is recognized by its build even without the secrets API")
+
+client, isForever = clientFor(11509, false, false)
+assert(client == "classic" and not isForever, "classic era")
+
+client, isForever = clientFor(50504, false, false)
+assert(client == "classic" and not isForever, "mists without the secrets API")
+
+client, isForever = clientFor(50504, true, false)
+assert(client == "forever" and isForever,
+    "any non-retail client exposing the secrets API takes the secret-value path everywhere")
+
+print("Client detection tests passed")

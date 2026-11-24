@@ -1,0 +1,107 @@
+local events, notifications, itemRequests, spellRequests = {}, {}, {}, {}
+local spells = {
+    [1] = { "Transfert", 101 },
+    [3] = { "Sort partagé", 103 },
+    ["Transfert"] = { "Transfert", 101 },
+}
+local items = {
+    [2] = { "Pierre de foyer", 202 },
+    [3] = { "Objet partagé", 203 },
+    ["Pierre de foyer"] = { "Pierre de foyer", 202 },
+}
+local coolline = {
+    db = { block = { ["1"] = true, ["2"] = true, ["3"] = true, ["4"] = true,
+        ["999"] = true, ["Transfert"] = true, [5] = true } },
+}
+
+function coolline:GetSpellInfoCompat(id)
+    local spell = spells[id]
+    return spell and spell[1], nil, spell and spell[2]
+end
+function coolline:GetItemNameCompat(id)
+    return items[id] and items[id][1]
+end
+function coolline:GetSpellTextureCompat(id)
+    return id == 6 and 106 or nil
+end
+
+C_Item = {
+    GetItemIconByID = function(id)
+        assert(type(id) == "number", "modern item icon API requires an ID")
+        return items[id] and items[id][2]
+    end,
+    GetItemInfoInstant = function(name) return name == "Pierre de foyer" and 2 or nil end,
+    RequestLoadItemDataByID = function(id) itemRequests[id] = (itemRequests[id] or 0) + 1 end,
+}
+C_Spell = {
+    RequestLoadSpellData = function(id) spellRequests[id] = (spellRequests[id] or 0) + 1 end,
+}
+CreateFrame = function()
+    return {
+        RegisterEvent = function(_, event) events[event] = true end,
+        SetScript = function(_, _, callback) events.callback = callback end,
+    }
+end
+local config = { RegisterOptionsTable = function() end }
+local dialog = { AddToBlizOptions = function() return {}, 1 end }
+local registry = { NotifyChange = function(_, name) notifications[#notifications + 1] = name end }
+LibStub = function(name)
+    if name == "AceAddon-3.0" then
+        return { GetAddon = function() return { MainFrame = coolline, Debug = function() end } end }
+    elseif name == "AceConfig-3.0" then
+        return config
+    elseif name == "AceConfigDialog-3.0" then
+        return dialog
+    elseif name == "AceConfigRegistry-3.0" then
+        return registry
+    end
+    return {}
+end
+
+assert(loadfile("options.lua"))("CoolLine")
+coolline:SetupOptions()
+local entries = coolline.OptionsTable.args.filters.args.entries
+local values = entries.values()
+assert(values["1"] == "|T101:16:16|t Transfert (Spell) [1]")
+assert(values["2"] == "|T202:16:16|t Pierre de foyer (Item) [2]")
+assert(values["3"] == "|T103:16:16|t Sort partagé (Spell) / |T203:16:16|t Objet partagé (Item) [3]")
+assert(values["Transfert"] == "|T101:16:16|t Transfert")
+coolline.db.block["Pierre de foyer"] = true
+assert(entries.values()["Pierre de foyer"] == "|T202:16:16|t Pierre de foyer")
+assert(values["999"] == "999" and values["4"] == "4")
+assert(itemRequests[4] == 1 and spellRequests[4] == 1)
+entries.values()
+assert(itemRequests[4] == 1 and spellRequests[4] == 1, "do not repeatedly request missing data")
+assert(events.GET_ITEM_INFO_RECEIVED and events.SPELL_DATA_LOAD_RESULT)
+
+items[4] = { "Objet chargé", 204 }
+events.callback(nil, "GET_ITEM_INFO_RECEIVED", 4, true)
+assert(notifications[1] == "CoolLineOptions" and notifications[2] == "ElvUI")
+assert(entries.values()["4"] == "|T204:16:16|t Objet chargé (Item) [4]")
+spells[4] = { "Sort chargé", 104 }
+events.callback(nil, "SPELL_DATA_LOAD_RESULT", 4, true)
+assert(notifications[3] == "CoolLineOptions" and notifications[4] == "ElvUI")
+assert(entries.values()["4"]:find("Sort chargé", 1, true))
+events.callback(nil, "GET_ITEM_INFO_RECEIVED", 999, false)
+assert(#notifications == 4, "failed loads do not trigger refresh loops")
+
+assert(entries.get(nil, 5))
+entries.set(nil, 5, false)
+assert(coolline.db.block[5] == nil, "numeric saved keys can be removed")
+entries.set(nil, "1", false)
+assert(coolline.db.block["1"] == nil, "string keys can be removed")
+
+spells[6] = { "Sort sans icône immédiate" }
+coolline.db.block["6"] = true
+assert(entries.values()["6"] == "|T106:16:16|t Sort sans icône immédiate (Spell) [6]")
+
+C_Item, C_Spell = nil, nil
+GetItemIcon = function(id) return items[id] and items[id][2] end
+events = {}
+assert(loadfile("options.lua"))("CoolLine")
+coolline:SetupOptions()
+entries = coolline.OptionsTable.args.filters.args.entries
+assert(entries.values()["2"] == "|T202:16:16|t Pierre de foyer (Item) [2]",
+    "legacy item icon API is supported")
+assert(not events.SPELL_DATA_LOAD_RESULT, "legacy clients do not register unsupported spell events")
+print("Blacklist options tests passed")

@@ -1,0 +1,130 @@
+-- core.lua event handling: combat/restriction transitions, per-client event registration, pet actions,
+-- failed-cast border and vehicle exit.
+local now = 100
+local creations = 0
+
+local function newFrame()
+    local frame = { scripts = {}, shown = true }
+    return setmetatable(frame, {
+        __index = function(self, key)
+            -- Data fields are lower-case (a real frame returns nil for a field that was never set);
+            -- only CamelCase names are widget methods.
+            if type(key) == "string" and key:match("^[a-z]") or key == "ElvUIMoverCreated" then
+                return nil
+            end
+            if key == "SetScript" then
+                return function(target, event, handler) target.scripts[event] = handler end
+            elseif key == "Show" then
+                return function(target) target.shown = true end
+            elseif key == "Hide" then
+                return function(target) target.shown = false end
+            elseif key == "CreateTexture" or key == "CreateFontString" then
+                return function() return newFrame() end
+            elseif key == "SetAlpha" then
+                return function(target, alpha) target.alpha = alpha end
+            end
+            return function() end
+        end,
+    })
+end
+
+local media = { Fetch = function() return "test" end, IsValid = function() return true end }
+floor = math.floor
+GetTime = function() return now end
+UnitClass = function() return nil, "MAGE" end
+UnitExists = function() return false end
+HasPetUI = function() return false end
+C_PetBattles = { IsInBattle = function() return false end }
+UnitHasVehicleUI = function() return false end
+IsLoggedIn = function() return false end
+CreateFrame = function() creations = creations + 1; return newFrame() end
+UIParent = newFrame()
+
+local function boot(build, hasSecretApi)
+    local frame = newFrame()
+    local registered = {}
+    frame.RegisterEvent = function(_, event) registered[event] = true end
+    frame.SetupOptions = function() end
+    frame.SPELL_UPDATE_COOLDOWN = function() end
+    frame.GetItemNameCompat = function() return "Hearthstone" end
+    frame.IsNativeTimelineEnabled = function() return false end
+    frame.SyncTimelineEvent = function() end
+    frame.CancelTimelineEvent = function(_, target) if target then target.timelineEventID = nil end end
+    frame.IsSecretValueCompat = function() return false end
+    frame.GetSpellInfoCompat = function(_, id) return "Spell" .. tostring(id), nil, id end
+    LibStub = function(name)
+        if name == "AceAddon-3.0" then
+            return { GetAddon = function() return { MainFrame = frame, Debug = function() end } end }
+        end
+        return media
+    end
+    GetBuildInfo = function() return nil, nil, nil, build end
+    issecretvalue = hasSecretApi and function() return false end or nil
+    C_RestrictedActions = hasSecretApi and { GetAddOnRestrictionState = function() return 0 end } or nil
+    CoolLineDB = { hidebag = true, hideinv = true, hidefail = false }
+    assert(loadfile("core.lua"))("CoolLine")
+    frame:ADDON_LOADED("CoolLine")
+    frame:PLAYER_LOGIN()
+    return frame, registered
+end
+
+-- Classic clients have no secret values: no combat snapshots.
+local classic, classicEvents = boot(11509, false)
+assert(classic.CLIENT == "classic")
+assert(not classicEvents.PLAYER_REGEN_DISABLED and not classicEvents.PLAYER_REGEN_ENABLED
+    and not classicEvents.ADDON_RESTRICTION_STATE_CHANGED, "classic registers no restriction events")
+
+-- Forever: transitions trigger an immediate exact scan.
+local frame, events = boot(16001, true)
+assert(frame.CLIENT == "forever")
+assert(events.PLAYER_REGEN_DISABLED and events.PLAYER_REGEN_ENABLED and events.ADDON_RESTRICTION_STATE_CHANGED,
+    "forever listens to combat and restriction transitions")
+
+local scans = 0
+frame.ScanCooldownsNow = function() scans = scans + 1 end
+frame:PLAYER_REGEN_DISABLED()
+assert(scans == 1, "entering combat snapshots cooldowns while they are readable")
+frame:PLAYER_REGEN_ENABLED()
+assert(scans == 2, "leaving combat reconciles cooldowns at once")
+Enum = { AddOnRestrictionState = { Inactive = 0, Activating = 1, Active = 2 } }
+frame:ADDON_RESTRICTION_STATE_CHANGED(0, Enum.AddOnRestrictionState.Activating)
+assert(scans == 3, "a restriction about to start is the last readable moment")
+frame:ADDON_RESTRICTION_STATE_CHANGED(0, Enum.AddOnRestrictionState.Active)
+assert(scans == 3, "no scan once the restriction is enforced: values are secret")
+frame:ADDON_RESTRICTION_STATE_CHANGED(0, Enum.AddOnRestrictionState.Inactive)
+assert(scans == 4, "restriction ended")
+
+-- Pet actions: every client returns name, texture, isToken.
+GetPetActionCooldown = function(i) if i == 1 then return 90, 20, 1 end return 0, 0, 0 end
+GetPetActionInfo = function() return "Bite", "Interface\\Icons\\Bite", false, true end
+frame:PET_BAR_UPDATE_COOLDOWN()
+assert(frame.cooldowns[1] and frame.cooldowns[1].name == "Bite"
+    and frame.cooldowns[1].iconTexture == "Interface\\Icons\\Bite", "pet action icon is the second return")
+frame.ClearCooldown(nil, "Bite", "pet")
+_G.PET_ACTION_TOKEN_TEXTURE = "Interface\\Icons\\Token"
+GetPetActionInfo = function() return "Attack", "PET_ACTION_TOKEN_TEXTURE", true end
+frame:PET_BAR_UPDATE_COOLDOWN()
+assert(frame.cooldowns[1].iconTexture == "Interface\\Icons\\Token", "token textures are resolved through globals")
+frame.ClearCooldown(nil, "Attack", "pet")
+
+-- Failed cast: the payload is (unit, castGUID, spellID) on every client.
+frame.NewCooldownClassic("Spell123", 1, 110, true, 123, "player")
+local before = creations
+frame:UNIT_SPELLCAST_FAILED("player", "Cast-3-1-2-3-123-0000000000", nil)
+frame:UNIT_SPELLCAST_FAILED("player", "Spell123", "not a number")
+assert(creations == before, "a payload without a numeric spell ID is ignored")
+frame:UNIT_SPELLCAST_FAILED("player", "Cast-3-1-2-3-123-0000000000", 999)
+assert(creations == before, "a spell without a running cooldown shows no border")
+frame:UNIT_SPELLCAST_FAILED("player", "Cast-3-1-2-3-123-0000000000", 123)
+assert(creations == before + 1, "a failed cast of a running cooldown flashes its icon")
+frame.ClearCooldown(nil, "Spell123", "player")
+
+-- Leaving a vehicle clears every vehicle icon, even when they are adjacent in the list.
+for i = 1, 3 do
+    frame.NewCooldownClassic("vehicle" .. i, 1, 110, false, nil, "vehicle")
+end
+frame.NewCooldownClassic("Other", 1, 110, true, 5, "player")
+frame:UNIT_EXITED_VEHICLE()
+assert(#frame.cooldowns == 1 and frame.cooldowns[1].name == "Other", "all vehicle cooldowns are cleared")
+
+print("Core event tests passed")

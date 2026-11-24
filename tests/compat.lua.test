@@ -1,0 +1,41 @@
+local coolline = {}
+LibStub = function()
+    return { GetAddon = function() return { MainFrame = coolline } end }
+end
+
+local spellInfoCalls = 0
+local durationObject = nil
+C_Spell = {
+    GetSpellCooldown = function() return { startTime = 1, duration = 2, isEnabled = true } end,
+    GetSpellInfo = function()
+        spellInfoCalls = spellInfoCalls + 1
+        return { name = "Unused" }
+    end,
+    GetSpellCooldownDuration = function() return durationObject end,
+}
+C_Container = {
+    GetContainerItemInfo = function()
+        return { iconFileID = 11, stackCount = 2, isLocked = false, quality = 3, isReadable = true,
+            hasLoot = false, hyperlink = "link", isFiltered = false, hasNoValue = false, itemID = 7, isBound = true }
+    end,
+}
+
+assert(loadfile("compat.lua"))("CoolLine")
+
+local start, duration, enabled = coolline:GetSpellCooldownCompat(1)
+assert(start == 1 and duration == 2 and enabled == 1, "modern cooldown table is converted to legacy returns")
+assert(spellInfoCalls == 0, "reading a cooldown must not look up unrelated spell info")
+
+assert(coolline:GetSpellCooldownDurationCompat(1) == nil, "an unknown spell has no duration object")
+durationObject = { GetRemainingDuration = function() return 12 end }
+assert(coolline:GetSpellCooldownDurationCompat(1) == 12, "remaining duration is read from the duration object")
+
+local icon, count, _, _, readable, _, _, _, _, itemID = coolline:GetContainerItemInfoCompat(0, 1)
+assert(icon == 11 and count == 2 and readable == true and itemID == 7,
+    "container info keeps the legacy return order, including the readable flag")
+
+assert(coolline:AreCooldownsRestrictedCompat() == false, "no secrets API means no restriction")
+C_Secrets = { ShouldCooldownsBeSecret = function() return true end }
+assert(coolline:AreCooldownsRestrictedCompat() == true, "restriction reported by the client")
+
+print("Compat tests passed")

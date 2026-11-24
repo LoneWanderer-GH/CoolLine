@@ -1,0 +1,29 @@
+-- The packager matches its flavor tokens case-sensitively and in lower case (#@version-forever@). A wrongly
+-- cased token is silently left in every package, duplicating ## Notes lines across flavors.
+local file = assert(io.open("CoolLine.toc", "r"))
+local text = file:read("*a")
+file:close()
+
+local known = {
+    ["version-retail"] = true, ["version-classic"] = true, ["version-bcc"] = true, ["version-mists"] = true,
+    ["version-forever"] = true, ["version-cata"] = true, ["version-wrath"] = true, ["debug"] = true,
+}
+local opened, closed = {}, {}
+for tag in text:gmatch("#@([%w%-]+)@") do
+    local name = tag:gsub("^end%-", "")
+    assert(known[name], "unknown or wrongly cased packager token in CoolLine.toc: " .. tag)
+    if tag:match("^end%-") then
+        closed[name] = (closed[name] or 0) + 1
+    else
+        opened[name] = (opened[name] or 0) + 1
+    end
+end
+for name, count in pairs(opened) do
+    assert(closed[name] == count, "unbalanced packager block in CoolLine.toc: " .. name)
+end
+for name, count in pairs(closed) do
+    assert(opened[name] == count, "unbalanced packager block in CoolLine.toc: " .. name)
+end
+assert(next(opened), "the TOC is expected to declare per-flavor blocks")
+
+print("TOC tests passed")
