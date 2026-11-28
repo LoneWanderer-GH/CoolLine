@@ -1,0 +1,184 @@
+local secret = {}
+local now = 100
+local spellInfos = {}
+local book = {}
+local created = {}
+local durationObject = {}
+
+issecretvalue = function(value) return value == secret end
+GetTime = function() return now end
+HasPetUI = function() return false end
+GetSpellBaseCooldown = function() return 15000 end
+CreateFrame = function()
+    local frame = {
+        SetScript = function(self, _, handler) self.update = handler end,
+        Show = function(self) self.shown = true end,
+        Hide = function(self) self.shown = false end,
+    }
+    created[#created + 1] = frame
+    return frame
+end
+C_Spell = {
+    GetSpellCooldown = function(id) return spellInfos[id] end,
+    GetSpellCharges = function() return nil end,
+    GetSpellCooldownDuration = function() return durationObject end,
+    GetSpellChargeDuration = function() return durationObject end,
+}
+C_SpellBook = {
+    GetNumSpellBookSkillLines = function() return 1 end,
+    GetSpellBookSkillLineInfo = function()
+        return { itemIndexOffset = 0, numSpellBookItems = #book, shouldHide = false }
+    end,
+    GetSpellBookItemInfo = function(slot)
+        local id = book[slot]
+        return id and { spellID = id, name = "Spell" .. id }
+    end,
+}
+
+local cooldowns = {}
+local coolline = {
+    IS_RETAIL_RELEASE = false,
+    CLIENT = "forever",
+    BOOKTYPE_SPELL = "spell",
+    BOOKTYPE_PET = "pet",
+    DEFAULT_RETAIL_GCD_DURATION_S = 1.5,
+    MINIMUM_COOLDOWN_DURATION_MS = 2499,
+    spells = { spell = {}, pet = {} },
+    chargespells = { spell = {}, pet = {} },
+    cooldowns = cooldowns,
+    db = {},
+    GetSpellInfoCompat = function(_, id) return "Spell" .. id, nil, 123 end,
+    IsBlocked = function() return false end,
+    LogCooldownDebug = function() end,
+    RefreshCooldownDisplay = function() end,
+    SyncTimelineEvent = function() end,
+}
+
+LibStub = function()
+    return { GetAddon = function() return { MainFrame = coolline } end }
+end
+
+local function frameOf(id)
+    for _, frame in ipairs(cooldowns) do
+        if frame.spellID == id then return frame end
+    end
+end
+
+function coolline.NewCooldownClassic(name, icon, endtime, _, id, source, estimated, object)
+    local frame
+    for _, existing in ipairs(cooldowns) do
+        if existing.name == name and existing.source == source then frame = existing end
+    end
+    if not frame then
+        frame = {}
+        cooldowns[#cooldowns + 1] = frame
+    end
+    frame.name, frame.iconTexture, frame.endtime, frame.spellID, frame.source = name, icon, endtime, id, source
+    frame.estimated, frame.object = estimated, object
+end
+
+function coolline.ClearCooldown(_, name, source)
+    for i = #cooldowns, 1, -1 do
+        if cooldowns[i].name == name and cooldowns[i].source == source then
+            table.remove(cooldowns, i)
+        end
+    end
+end
+
+assert(loadfile("compat.lua"))("CoolLine")
+assert(loadfile("spellbook.lua"))("CoolLine")
+local throttle = created[1]
+
+local function secretInfo(active)
+    return { startTime = secret, duration = secret, isEnabled = true, isActive = active, isOnGCD = false }
+end
+local function scan() coolline:SPELL_UPDATE_COOLDOWN(true) end
+-- A new secret cooldown is shown only after the confirmation window.
+local function confirm()
+    scan()
+    now = now + 2.6
+    throttle.update(throttle, 0.4)
+end
+
+-- 1. Exact timing read before a restriction survives it instead of being downgraded to an estimate.
+coolline.spells.spell[1] = "Spell1"
+spellInfos[1] = { startTime = 100, duration = 30, isEnabled = true, isActive = true }
+scan()
+assert(frameOf(1).endtime == 130 and not frameOf(1).estimated, "readable cooldown")
+spellInfos[1] = secretInfo(true)
+now = 110
+scan()
+assert(frameOf(1).endtime == 130 and not frameOf(1).estimated and frameOf(1).object == nil,
+    "exact end stays exact while the game restricts timing")
+now = 131
+scan()
+assert(frameOf(1).estimated and frameOf(1).endtime == 130 and frameOf(1).confirmedAt == 131
+    and frameOf(1).object == durationObject, "only an overdue exact end becomes an estimate, and it keeps its end")
+spellInfos[1] = { startTime = 100, duration = 40, isEnabled = true, isActive = true }
+scan()
+assert(frameOf(1).endtime == 140 and not frameOf(1).estimated, "readable timing replaces the estimate")
+spellInfos[1].isActive = false
+spellInfos[1].startTime, spellInfos[1].duration = 0, 0
+scan()
+assert(not frameOf(1), "end of the cooldown")
+
+-- 2. The real duration is learned when an estimated cooldown ends, and an implausible one is ignored.
+coolline.spells.spell[1] = nil
+coolline.spells.spell[2] = "Spell2"
+now = 200
+spellInfos[2] = secretInfo(true)
+confirm()
+assert(frameOf(2).estimated and frameOf(2).endtime == 215, "first estimate uses the base cooldown")
+now = 224
+spellInfos[2].isActive = false
+scan()
+assert(not frameOf(2), "game reports the end")
+now = 300
+spellInfos[2].isActive = true
+confirm()
+assert(frameOf(2).endtime == 300 + 24, "next estimate uses the observed duration")
+now = 304
+spellInfos[2].isActive = false
+scan()
+assert(not frameOf(2), "a reset clears the icon")
+now = 400
+spellInfos[2].isActive = true
+confirm()
+assert(frameOf(2).endtime == 400 + 24, "a much shorter observation is not learned")
+
+-- 3. A cast seen well after the icon started means the cooldown was restarted.
+now = 410
+coolline:UNIT_SPELLCAST_SUCCEEDED("player", "guid", 2)
+scan()
+assert(frameOf(2).endtime == 410 + 24 and frameOf(2).estimated, "recast after a reset restarts the estimate")
+now = 412
+coolline:UNIT_SPELLCAST_SUCCEEDED("player", "guid", 2)
+scan()
+assert(frameOf(2).endtime == 410 + 24, "a cast right after the start is not a restart")
+
+-- 4. Spells that left the spellbook lose their tracking, icon and learned durations.
+spellInfos[2].isActive = false
+scan()
+book = { 2, 3 }
+coolline.spells.spell[2], coolline.spells.spell[1] = nil, "Spell1"
+spellInfos[1] = secretInfo(true)
+spellInfos[3] = secretInfo(false)
+coolline:SPELLS_CHANGED()
+assert(not coolline.spells.spell[1] and coolline.spells.spell[2] and coolline.spells.spell[3],
+    "spellbook cache drops removed spells and adds new ones")
+now = 500
+confirm()
+assert(frameOf(2) == nil, "inactive spell shows nothing")
+spellInfos[2].isActive = true
+now = 600
+confirm()
+assert(frameOf(2).endtime == 600 + 15, "learned durations are invalidated when the spellbook changes")
+coolline.NewCooldownClassic("Spell9", 1, now + 100, true, 9, "player")
+book = { 2, 3 }
+coolline:SPELLS_CHANGED()
+assert(not frameOf(9), "icons of untracked spells are removed")
+book = {}
+coolline:SPELLS_CHANGED()
+assert(coolline.spells.spell[2], "an empty spellbook is transient and keeps the previous tracking")
+
+print("Forever transition tests passed")

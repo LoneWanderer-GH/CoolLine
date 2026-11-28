@@ -1,0 +1,230 @@
+local secret = {}
+local now = 100
+local info
+local chargeInfo
+local spellInfos = {}
+local chargeInfos = {}
+local durationObject = {}
+local throttle
+
+issecretvalue = function(value) return value == secret end
+GetTime = function() return now end
+HasPetUI = function() return false end
+GetSpellBaseCooldown = function() return 15000 end
+CreateFrame = function()
+    throttle = {
+        SetScript = function(self, _, handler) self.update = handler end,
+        Show = function(self) self.shown = true end,
+        Hide = function(self) self.shown = false end,
+    }
+    return throttle
+end
+C_Spell = {
+    GetSpellCooldown = function(id) return spellInfos[id] or info end,
+    GetSpellCharges = function(id) return chargeInfos[id] or chargeInfo end,
+    GetSpellCooldownDuration = function(_, ignoreGCD)
+        assert(ignoreGCD == true)
+        return durationObject
+    end,
+    GetSpellChargeDuration = function() return durationObject end,
+}
+
+local frames = {}
+local coolline = {
+    IS_RETAIL_RELEASE = false,
+    CLIENT = "forever",
+    BOOKTYPE_SPELL = "spell",
+    BOOKTYPE_PET = "pet",
+    DEFAULT_RETAIL_GCD_DURATION_S = 1.5,
+    MINIMUM_COOLDOWN_DURATION_MS = 2499,
+    spells = { spell = {}, pet = {} },
+    chargespells = { spell = {}, pet = {} },
+    cooldowns = frames,
+    db = {},
+    GetSpellInfoCompat = function(_, id) return tostring(id), nil, 123 end,
+    IsBlocked = function(self, name, id) return self.blocked == id end,
+    LogCooldownDebug = function() end,
+    RefreshCooldownDisplay = function() end,
+    SyncTimelineEvent = function() end,
+}
+
+LibStub = function()
+    return { GetAddon = function() return { MainFrame = coolline } end }
+end
+
+function coolline.NewCooldownClassic(name, icon, endtime, _, id, source, estimated, object)
+    local frame = frames[id] or {}
+    frame.name, frame.iconTexture, frame.endtime, frame.source = name, icon, endtime, source
+    frame.estimated, frame.object = estimated, object
+    frames[id] = frame
+end
+
+function coolline.ClearCooldown(_, name, source)
+    for id, frame in pairs(frames) do
+        if frame.name == name and frame.source == source then
+            frames[id] = nil
+        end
+    end
+end
+
+assert(loadfile("compat.lua"))("CoolLine")
+assert(loadfile("spellbook.lua"))("CoolLine")
+
+coolline.spells.spell[123] = "Blink"
+info = { startTime = 95, duration = 15, isEnabled = true, isActive = true }
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(frames[123].endtime == 110 and not frames[123].estimated, "readable cooldown")
+
+info = { startTime = secret, duration = secret, isEnabled = true, isActive = true, isOnGCD = false }
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(frames[123].endtime == 110 and not frames[123].estimated, "an exact end still in the future is kept as is")
+assert(frames[123].object == nil, "no native swipe is attached to an exact (anchored) icon")
+
+now = 105
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(frames[123].endtime == 110 and not frames[123].estimated, "do not restart the timing on rescans")
+
+now = 120
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(frames[123].endtime == 110 and frames[123].estimated and frames[123].confirmedAt == 120,
+    "an overdue end is kept (the bar waits at its hold point) and the scan is recorded as a confirmation")
+assert(frames[123].object == durationObject, "pass native duration object once the timing is estimated")
+
+info.isActive = false
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(not frames[123], "clear when the game reports inactive")
+
+info.isActive, info.isOnGCD = true, true
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(not frames[123], "do not add a GCD-only cooldown")
+assert(throttle.shown, "recheck after an event reports a GCD")
+info.isOnGCD = false
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(not frames[123] and throttle.shown, "new secret cooldown must be confirmed")
+now = 122.6
+throttle.update(throttle, 0.4)
+assert(frames[123].endtime == 120 + 25 and frames[123].estimated,
+    "start an estimated cooldown using the duration observed when the previous one ended")
+
+info.isOnGCD = true
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(frames[123] and frames[123].estimated, "retain a cooldown during a GCD")
+info.isActive = nil
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(frames[123] and frames[123].estimated, "retain a cooldown when active state is unavailable")
+info.isActive = true
+local savedInfo = info
+info = nil
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(frames[123] and frames[123].estimated, "retain a cooldown when the API returns no information")
+now = 145 + 5.1
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(not frames[123], "drop an icon the game no longer knows once it is overdue")
+info = savedInfo
+coolline.blocked = 123
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(not frames[123], "blacklist still clears secret cooldowns")
+coolline.blocked = nil
+
+coolline.spells.spell[123] = nil
+coolline.chargespells.spell[456] = "Charge"
+chargeInfo = { currentCharges = secret, maxCharges = 2, cooldownStartTime = secret,
+    cooldownDuration = secret, isActive = true }
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(not frames[456] and throttle.shown, "new secret recharge must be confirmed")
+now = now + 2.5
+throttle.update(throttle, 0.4)
+assert(frames[456] and frames[456].object == durationObject, "track a secret recharge")
+chargeInfo.isActive = false
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(not frames[456], "clear a completed recharge")
+
+coolline.spells.spell[123] = "Blink"
+coolline.chargespells.spell[456] = nil
+info = { startTime = secret, duration = secret, isEnabled = true, isActive = true, isOnGCD = false }
+coolline:SPELL_UPDATE_COOLDOWN()
+assert(throttle.shown, "non-event rescans are deferred")
+throttle.update(throttle, 0.4)
+assert(not frames[123], "do not trust delayed GCD state to create an icon")
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(not frames[123], "event rescan also waits for confirmation")
+now = now + 2.5
+throttle.update(throttle, 0.4)
+assert(frames[123], "event rescan creates the active cooldown")
+info.isActive = false
+coolline:SPELL_UPDATE_COOLDOWN()
+throttle.update(throttle, 0.4)
+assert(not frames[123], "deferred rescan removes inactive cooldown")
+
+coolline.spells.spell[123] = nil
+info = nil
+chargeInfo = nil
+for id = 1001, 1010 do
+    coolline.spells.spell[id] = "GCD " .. id
+    spellInfos[id] = { startTime = secret, duration = secret, isEnabled = true,
+        isActive = true }
+    if id % 2 == 0 then spellInfos[id].isOnGCD = false end
+end
+for id = 2001, 2003 do
+    coolline.chargespells.spell[id] = "Charge " .. id
+    chargeInfos[id] = { currentCharges = secret, maxCharges = 2, cooldownStartTime = secret,
+        cooldownDuration = secret, isActive = true }
+end
+coolline:SPELL_UPDATE_COOLDOWN(true)
+assert(not next(frames), "a simultaneous transient must not create any icons")
+now = now + 1
+throttle.update(throttle, 0.4)
+assert(not next(frames), "transient icons must not appear during confirmation")
+for _, value in pairs(spellInfos) do value.isActive = false end
+for _, value in pairs(chargeInfos) do value.isActive = false end
+now = now + 1.6
+throttle.update(throttle, 0.4)
+assert(not next(frames), "expired GCD and charge blips must never appear")
+
+spellInfos[1001].isActive = true
+spellInfos[1002].isActive = true
+chargeInfos[2001].isActive = true
+coolline:SPELL_UPDATE_COOLDOWN(true)
+now = now + 2.5
+throttle.update(throttle, 0.4)
+assert(frames[1001] and frames[1002] and frames[2001], "sustained cooldowns must be shown")
+assert(frames[1001].endtime == now - 2.5 + 15, "estimate begins at first detection")
+
+for _, value in pairs(spellInfos) do value.isActive = false end
+for _, value in pairs(chargeInfos) do value.isActive = false end
+coolline:SPELL_UPDATE_COOLDOWN(true)
+spellInfos[1003].isActive = true
+spellInfos[1003].isOnGCD = secret
+coolline:SPELL_UPDATE_COOLDOWN(true)
+now = now + 1
+throttle.update(throttle, 0.4)
+spellInfos[1003].isActive = false
+now = now + 0.4
+throttle.update(throttle, 0.4)
+spellInfos[1003].isActive = true
+coolline:SPELL_UPDATE_COOLDOWN(true)
+now = now + 1.6
+throttle.update(throttle, 0.4)
+assert(not frames[1003], "interrupted activity must restart the confirmation window")
+now = now + 0.9
+throttle.update(throttle, 0.4)
+assert(frames[1003], "continuous activity is confirmed even when GCD state is secret")
+
+for _, value in pairs(spellInfos) do value.isActive = false end
+coolline:SPELL_UPDATE_COOLDOWN(true)
+coolline.spells.spell[3001] = "Cast"
+spellInfos[3001] = { startTime = secret, duration = secret, isEnabled = true, isActive = true, isOnGCD = false }
+now = now + 10
+coolline:UNIT_SPELLCAST_SUCCEEDED("player", "guid", 3001)
+now = now + 0.2
+coolline:SPELL_UPDATE_COOLDOWN(true)
+local castTime = now - 0.2
+now = now + 2.5
+throttle.update(throttle, 0.4)
+assert(frames[3001] and frames[3001].endtime == castTime + 15, "estimate starts at the observed cast")
+spellInfos[3001].isActive = false
+coolline:SPELL_UPDATE_COOLDOWN(true)
+coolline:RequestCooldownRecheck()
+assert(throttle.shown, "estimated icons can request a rescan")
+
+print("Forever cooldown tests passed")

@@ -14,3 +14,23 @@ permissions:
 jobs:
   package:
     uses: LoneWanderer-GH/WoWAddonTooling/.github/workflows/addon-ci.yml@v1.0.8
+
+  regression-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out addon
+        uses: actions/checkout@v7
+
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+
+      - name: Run regression scripts
+        run: |
+          set -e
+          for test in tests/*.lua.test; do
+            echo "::group::$test"
+            lua5.1 "$test"
+            echo "::endgroup::"
+          done

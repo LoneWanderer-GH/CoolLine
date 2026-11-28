@@ -1,0 +1,159 @@
+local now = 100
+local function newFrame()
+    local frame = { scripts = {}, shown = true }
+    return setmetatable(frame, {
+        __index = function(self, key)
+            -- Data fields are lower-case (a real frame returns nil for a field that was never set);
+            -- only CamelCase names are widget methods.
+            if type(key) == "string" and key:match("^[a-z]") or key == "ElvUIMoverCreated" then
+                return nil
+            end
+            if key == "SetScript" then
+                return function(target, event, handler) target.scripts[event] = handler end
+            elseif key == "Show" then
+                return function(target) target.shown = true end
+            elseif key == "Hide" then
+                return function(target) target.shown = false end
+            elseif key == "CreateTexture" or key == "CreateFontString" then
+                return function() return newFrame() end
+            elseif key == "SetCooldownFromDurationObject" then
+                return function(target, object) target.durationObject = object end
+            elseif key == "SetHideCountdownNumbers" then
+                return function(target, hide) target.hideNumbers = hide end
+            elseif key == "SetAlpha" then
+                return function(target, alpha) target.alpha = alpha end
+            end
+            return function() end
+        end,
+    })
+end
+
+local frame = newFrame()
+frame.SetupOptions = function() end
+frame.SPELL_UPDATE_COOLDOWN = function() end
+frame.GetItemNameCompat = function() return "Hearthstone" end
+frame.IsNativeTimelineEnabled = function() return false end
+frame.SyncTimelineEvent = function() end
+frame.CancelTimelineEvent = function(self, target)
+    self.cancelCount = (self.cancelCount or 0) + 1
+    if target then target.timelineEventID = nil end
+end
+frame.IsSecretValueCompat = function() return false end
+local media = { Fetch = function() return "test" end, IsValid = function() return true end }
+LibStub = function(name)
+    if name == "AceAddon-3.0" then
+        return { GetAddon = function() return { MainFrame = frame, Debug = function() end } end }
+    end
+    return media
+end
+
+floor = math.floor
+GetBuildInfo = function() return nil, nil, nil, 16001 end
+GetTime = function() return now end
+UnitClass = function() return nil, "MAGE" end
+UnitExists = function() return false end
+HasPetUI = function() return false end
+C_PetBattles = { IsInBattle = function() return false end }
+UnitHasVehicleUI = function() return false end
+IsLoggedIn = function() return false end
+CreateFrame = function() return newFrame() end
+UIParent = newFrame()
+CoolLineDB = { hidebag = true, hideinv = true, hidepet = true, hidefail = true }
+
+assert(loadfile("core.lua"))("CoolLine")
+frame:ADDON_LOADED("CoolLine")
+frame:PLAYER_LOGIN()
+
+local durationObject = {}
+local rechecks, scans = 0, 0
+frame.RequestCooldownRecheck = function() rechecks = rechecks + 1 end
+frame.ScanCooldownsNow = function() scans = scans + 1 end
+frame.NewCooldownClassic("Blink", 123, 110, true, 123, "player", true, durationObject)
+local icon = frame.cooldowns[1]
+assert(icon and icon.estimated and icon.secretCooldown.durationObject == durationObject)
+assert(icon.secretCooldown.hideNumbers, "native numbers disagree with the estimated position")
+assert(icon.estimateLabel.shown, "estimated position must be marked")
+now = 115
+frame.scripts.OnUpdate(frame, 2)
+assert(frame.cooldowns[1] == icon and icon.alpha ~= 0, "a slightly overdue estimate stays while the game may confirm it")
+assert(rechecks == 1, "an overdue estimate requests a rescan")
+now = 115.1
+frame.scripts.OnUpdate(frame, 2)
+assert(rechecks == 1, "rescan requests are rate limited")
+icon.secretCooldown.scripts.OnCooldownDone()
+assert(scans == 1 and rechecks == 1, "native completion scans immediately")
+icon.secretCooldown.scripts.OnCooldownDone()
+assert(scans == 1 and rechecks == 2, "repeated completions fall back to the throttled rescan")
+now = 140
+frame.scripts.OnUpdate(frame, 2)
+assert(#frame.cooldowns == 0, "an estimate the game stopped confirming is dropped after a while")
+assert(not icon.estimateLabel.shown and not icon.secretCooldown.shown)
+
+frame.NewCooldownClassic("Blink", 123, 150, true, 123, "player", true, durationObject)
+assert(frame.cooldowns[1] == icon and icon.estimated)
+frame.ClearCooldown(nil, "Blink", "player")
+assert(#frame.cooldowns == 0 and not icon.estimateLabel.shown and not icon.secretCooldown.shown)
+assert(frame.cancelCount > 0, "clearing an icon cancels its timeline event")
+
+frame.NewCooldownClassic("Blink", 123, 220, true, 123, "player")
+assert(frame.cooldowns[1] == icon and not icon.estimated, "reused frame resets estimated state")
+assert(not icon.estimateLabel.shown and not icon.secretCooldown.shown)
+frame.NewCooldownClassic("Other", 456, 220, true, 456, "player")
+assert(#frame.cooldowns == 2, "distinct spells with matching end times are retained")
+frame.ClearCooldown(nil, "Blink", "player")
+frame.ClearCooldown(nil, "Other", "player")
+
+-- A cooldown routed to Blizzard's timeline is hidden from the bar but still expires locally.
+frame.NewCooldownClassic("Native", 789, 150, true, 789, "player")
+local native = frame.cooldowns[1]
+native.timelineEventID = 5
+frame.RefreshCooldownDisplay()
+assert(not native.shown and frame.scripts.OnUpdate, "native-only cooldowns keep a slow expiry sweep")
+now = 150.5
+frame.scripts.OnUpdate(frame, 2)
+assert(#frame.cooldowns == 1, "a native cooldown is kept just after its end")
+now = 152
+frame.scripts.OnUpdate(frame, 2)
+assert(#frame.cooldowns == 0, "a native cooldown no scan cleared is dropped")
+assert(frame.scripts.OnUpdate == nil, "the sweep stops once no cooldown is left")
+
+-- A frame without any timing data is cleared instead of failing the display loop.
+frame.NewCooldownClassic("Broken", 321, 400, true, 321, "player")
+frame.cooldowns[1].endtime = nil
+now = 153
+assert(pcall(frame.scripts.OnUpdate, frame, 2) and #frame.cooldowns == 0, "timing-less frame is dropped safely")
+
+-- Expert settings fall back to the default when invalid and are clamped to their range.
+local db = CoolLineDB
+assert(frame:GetExpert("hold") == 0.5 and frame:GetExpert("confirm") == 2.5, "defaults apply without saved values")
+assert(frame:GetExpert("recheck") == 0.25)
+db.expert = { hold = 99, confirm = "x", orphan = 0 / 0, fallback = -5, recheck = 0.3 }
+assert(frame:GetExpert("hold") == 3, "values above the range are clamped")
+assert(frame:GetExpert("confirm") == 2.5 and frame:GetExpert("orphan") == 5, "invalid values use the default")
+assert(frame:GetExpert("fallback") == 5 and frame:GetExpert("recheck") == 0.3, "low values clamp, valid ones are kept")
+assert(frame:GetExpert("unknown") == nil)
+db.expert = nil
+
+-- An exhausted estimate that the game still reports waits at the hold point; several of them are fanned out,
+-- keep their normal size and stay opaque, and the first scan that stops reporting them removes the icons.
+now = 200
+frame.NewCooldownClassic("First", 1, 199, true, 1, "player", true, durationObject)
+frame.NewCooldownClassic("Second", 2, 199.5, true, 2, "player", true, durationObject)
+local first, second = frame.cooldowns[1], frame.cooldowns[2]
+frame.scripts.OnUpdate(frame, 2)
+assert(first.pinned and second.pinned, "estimates past their end wait at the hold point")
+assert(first.pinOffset ~= second.pinOffset, "waiting icons do not overlap")
+assert(first.alpha == 1 and second.alpha == 1, "waiting icons stay opaque")
+now = 210
+frame.scripts.OnUpdate(frame, 2)
+assert(first.pinned and #frame.cooldowns == 2, "a pinned icon is not dropped while the game may still confirm it")
+frame.ClearCooldown(nil, "First", "player")
+assert(not first.pinned and first.pinOffset == nil, "clearing a pinned icon resets its waiting state")
+db.expert = { hold = 0 }
+frame.scripts.OnUpdate(frame, 2)
+assert(not second.pinned or second.pinOffset == 0, "a zero hold point never fans out icons")
+db.expert = nil
+now = 230
+frame.scripts.OnUpdate(frame, 2)
+assert(#frame.cooldowns == 0, "a waiting icon nobody confirms is eventually swept")
+print("Forever display tests passed")

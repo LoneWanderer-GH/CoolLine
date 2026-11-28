@@ -1,7 +1,8 @@
 local addonName = ...
 local CoolLineApp = LibStub("AceAddon-3.0"):GetAddon(addonName)
 local CoolLine = CoolLineApp.MainFrame
-local EVENT_EXPIRATION_TOLERANCE = 0.5
+-- A native event is kept while the cooldown still ends within this many seconds of the registered end.
+local EVENT_END_TOLERANCE = 0.5
 
 
 local function logTimelineStatus(frame, status)
@@ -91,6 +92,8 @@ function CoolLine:SyncTimelineEvent(frame)
     local reason
     if not timelineEnabled then
         reason = timelineDisabledReason
+    elseif frame.estimated then
+        reason = "cooldown timing is estimated"
     elseif not sourceEnabled then
         reason = "this cooldown source is disabled in settings"
     elseif not frame.spellID then
@@ -110,23 +113,32 @@ function CoolLine:SyncTimelineEvent(frame)
     end
 
     local now = GetTime()
-    local eventEndTime = frame.endtime or (now + math.max(0, frame.remaining_duration or 0))
+    -- Frames fed by a remaining duration carry the time of that sample; anchoring the end there keeps it stable.
+    local eventEndTime = frame.endtime
+        or ((frame.cooldownSampleTime or now) + math.max(0, frame.remaining_duration or 0))
     if frame.timelineEventID and frame.timelineEventSpellID == frame.spellID then
-        if frame.timelineEventEndTime
-            and now < frame.timelineEventEndTime - EVENT_EXPIRATION_TOLERANCE then
-            
+        local registeredEnd = frame.timelineEventEndTime
+        if registeredEnd and now < registeredEnd
+            and math.abs(eventEndTime - registeredEnd) <= EVENT_END_TOLERANCE then
+
             logTimelineStatus(frame, "already registered (event ID "
                 .. tostring(frame.timelineEventID) .. ")")
-            
+
             return
         end
-        -- Blizzard events expire on their own; discard the stale local handle before re-adding.
-        
-        logTimelineStatus(frame, "previous event expired; replacing local event handle")
-        
+        -- The event expired on its own, or the cooldown now ends at a different time.
+
+        logTimelineStatus(frame, "event expired or cooldown end changed; replacing local event handle")
+
     end
 
     cancelEvent(frame)
+    if eventEndTime <= now then
+
+        logTimelineStatus(frame, "not sent: cooldown already ended")
+
+        return
+    end
     local severity = Enum and Enum.EncounterEventSeverity and Enum.EncounterEventSeverity.Medium
     if not severity then
         

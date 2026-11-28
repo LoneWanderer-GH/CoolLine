@@ -1,0 +1,63 @@
+local added, cancelled = 0, 0
+local now = 100
+GetTime = function() return now end
+Enum = {
+    EncounterEventSeverity = { Medium = 1 },
+    EncounterTimelineViewType = { None = 0 },
+}
+C_EncounterTimeline = {
+    IsFeatureAvailable = function() return true end,
+    IsFeatureEnabled = function() return true end,
+    GetViewType = function() return 1 end,
+    AddScriptEvent = function()
+        added = added + 1
+        return added
+    end,
+    CancelScriptEvent = function() cancelled = cancelled + 1 end,
+}
+local coolline = {
+    db = { blizzardTimeline = true, timelinePlayer = true },
+    LogCooldownDebug = function() end,
+}
+LibStub = function()
+    return { GetAddon = function()
+        return { MainFrame = coolline, Trace = function() end }
+    end }
+end
+assert(loadfile("timeline.lua"))("CoolLine")
+
+local frame = { name = "Blink", spellID = 123, iconTexture = 456, source = "player", endtime = 115 }
+coolline:SyncTimelineEvent(frame)
+assert(added == 1 and frame.timelineEventID == 1, "readable cooldown should be routed")
+frame.estimated = true
+coolline:SyncTimelineEvent(frame)
+assert(cancelled == 1 and frame.timelineEventID == nil, "estimated cooldown cancels the old event")
+coolline:SyncTimelineEvent(frame)
+assert(added == 1, "estimated cooldown must not create a native event")
+frame.estimated = nil
+coolline:SyncTimelineEvent(frame)
+assert(added == 2, "readable cooldown may be routed again")
+
+now = 114.8
+coolline:SyncTimelineEvent(frame)
+assert(added == 2 and cancelled == 1, "the last moments of an event do not churn the native timeline")
+frame.endtime = 130
+now = 105
+coolline:SyncTimelineEvent(frame)
+assert(added == 3, "a cooldown that now ends later replaces the native event")
+frame.endtime = 130.3
+coolline:SyncTimelineEvent(frame)
+assert(added == 3, "a negligible end shift keeps the native event")
+
+local sampled = { name = "Sampled", spellID = 124, iconTexture = 456, source = "player",
+    remaining_duration = 20, cooldownSampleTime = 105 }
+now = 105
+coolline:SyncTimelineEvent(sampled)
+assert(added == 4, "duration-based cooldown is routed")
+now = 112
+coolline:SyncTimelineEvent(sampled)
+assert(added == 4, "its end is anchored on the sample time, so it does not drift later")
+now = 126
+coolline:SyncTimelineEvent(sampled)
+assert(added == 4 and sampled.timelineEventID == nil, "an ended cooldown is not registered again")
+print("Forever timeline tests passed")

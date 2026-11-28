@@ -16,12 +16,12 @@ function CoolLine:GetSpellCooldownCompat(spellID)
     end
     if C_Spell and C_Spell.GetSpellCooldown then
         local info = C_Spell.GetSpellCooldown(spellID)
-        local name, _, _, _, _, _, _ = CoolLine:GetSpellInfoCompat(spellID)
         if info then
-            local startTime = info.startTime or 0
-            local duration = info.duration or 0
-            local isEnabled = info.isEnabled or false
-            return startTime, duration, isEnabled and 1 or 0
+            local isEnabled = info.isEnabled
+            if not self:IsSecretValueCompat(isEnabled) then
+                isEnabled = isEnabled and 1 or 0
+            end
+            return info.startTime, info.duration, isEnabled
         end
     end
 end
@@ -34,11 +34,7 @@ function CoolLine:GetSpellChargesCompat(spellID)
     local info = C_Spell and C_Spell.GetSpellCharges and C_Spell.GetSpellCharges(spellID)
     if info then
         -- return info.currentCharges, info.maxCharges, info.cooldownStartTime, info.cooldownDuration
-        local start = info.cooldownStartTime or 0
-        local duration = info.cooldownDuration or 0
-        local currentCharges = info.currentCharges or 0
-        local maxCharges = info.maxCharges or 0
-        return currentCharges, maxCharges, start, duration
+        return info.currentCharges, info.maxCharges, info.cooldownStartTime, info.cooldownDuration
     end
 end
 
@@ -202,7 +198,7 @@ function CoolLine:GetContainerItemInfoCompat(bagID, slotID)
             -- Extract and oprder data to mimic old function :
             -- 1: iconFileID, 2: stackCount, 3: isLocked, 4: quality, 5: readable, 
             -- 6: hasLoot, 7: hyperlink, 8: isFiltered, 9: hasNoValue, 10: itemID, 11: isBound
-            return info.iconFileID, info.stackCount, info.isLocked, info.quality, info.readable,
+            return info.iconFileID, info.stackCount, info.isLocked, info.quality, info.isReadable,
                    info.hasLoot, info.hyperlink, info.isFiltered, info.hasNoValue, info.itemID, info.isBound
         end
     end
@@ -240,13 +236,19 @@ end
 
 
 
--- Midnight: Secret-safe spell cooldown
+-- Midnight: Secret-safe spell cooldown (the API may return nothing for an unknown spell)
 function CoolLine:GetSpellCooldownDurationCompat(spellID)
     if C_Spell and C_Spell.GetSpellCooldownDuration then
         local duration = C_Spell.GetSpellCooldownDuration(spellID)
-        return duration:GetRemainingDuration()
+        return duration and duration:GetRemainingDuration()
     end
     return nil
+end
+
+-- True when the client reports that cooldown queries currently return secret values.
+function CoolLine:AreCooldownsRestrictedCompat()
+    local secrets = _G.C_Secrets
+    return secrets and secrets.ShouldCooldownsBeSecret and secrets.ShouldCooldownsBeSecret() == true or false
 end
 
 -- Midnight: Secret-safe spell charge cooldown

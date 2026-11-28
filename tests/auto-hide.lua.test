@@ -1,0 +1,202 @@
+local now = 100
+local frames = {}
+local function newFrame()
+    local frame = { scripts = {}, shown = true, registered = {} }
+    return setmetatable(frame, {
+        __index = function(self, key)
+            -- Data fields are lower-case (a real frame returns nil for a field that was never set);
+            -- only CamelCase names are widget methods.
+            if type(key) == "string" and key:match("^[a-z]") or key == "ElvUIMoverCreated" then
+                return nil
+            end
+            if key == "SetScript" then
+                return function(target, event, handler) target.scripts[event] = handler end
+            elseif key == "Show" then
+                return function(target) target.shown = true end
+            elseif key == "Hide" then
+                return function(target) target.shown = false end
+            elseif key == "RegisterEvent" then
+                return function(target, event) target.registered[event] = true end
+            elseif key == "RegisterUnitEvent" then
+                return function(target, event, unit) target.registered[event] = unit end
+            elseif key == "UnregisterAllEvents" then
+                return function(target) target.registered = {} end
+            elseif key == "CreateTexture" or key == "CreateFontString" then
+                return function() return newFrame() end
+            end
+            return function() end
+        end,
+    })
+end
+
+local frame = newFrame()
+frame.SetupOptions = function() end
+frame.SPELL_UPDATE_COOLDOWN = function() end
+frame.GetItemNameCompat = function() return "Hearthstone" end
+frame.IsNativeTimelineEnabled = function() return false end
+frame.SyncTimelineEvent = function() end
+frame.CancelTimelineEvent = function() end
+frame.IsSecretValueCompat = function(_, value) return value == "secret" end
+local media = { Fetch = function() return "test" end, IsValid = function() return true end }
+LibStub = function(name)
+    if name == "AceAddon-3.0" then
+        return { GetAddon = function() return { MainFrame = frame, Debug = function() end } end }
+    end
+    return media
+end
+
+local onTaxi, mounted, flying, gliding, inCombat = false, false, false, false, false
+floor = math.floor
+GetBuildInfo = function() return nil, nil, nil, 16001 end
+GetTime = function() return now end
+UnitClass = function() return nil, "MAGE" end
+UnitExists = function() return false end
+HasPetUI = function() return false end
+C_PetBattles = { IsInBattle = function() return false end }
+UnitHasVehicleUI = function() return false end
+IsLoggedIn = function() return false end
+CreateFrame = function()
+    local created = newFrame()
+    frames[#frames + 1] = created
+    return created
+end
+UIParent = newFrame()
+CoolLineDB = { hidebag = true, hideinv = true, hidepet = true, hidefail = true }
+UnitOnTaxi = function(unit)
+    assert(unit == "player")
+    return onTaxi
+end
+IsMounted = function() return mounted end
+IsFlying = function() return flying end
+InCombatLockdown = function() return inCombat end
+C_PlayerInfo = { GetGlidingInfo = function() return gliding, true, 0 end }
+
+assert(loadfile("core.lua"))("CoolLine")
+local framesBefore = #frames
+assert(loadfile("autohide.lua"))("CoolLine")
+assert(#frames == framesBefore + 1, "autohide.lua creates a single frame of its own")
+local aux = frames[#frames]
+assert(not aux.shown, "the helper frame does not run until an option needs it")
+frame:ADDON_LOADED("CoolLine")
+frame:PLAYER_LOGIN()
+local db = frame.db
+
+local function tick(seconds)
+    now = now + seconds
+    if aux.shown then
+        aux.scripts.OnUpdate(aux, seconds)
+    end
+end
+local function fire(event)
+    aux.scripts.OnEvent(aux, event)
+end
+
+assert(frame.shown and not next(aux.registered) and not aux.shown, "nothing runs while every option is off")
+
+-- Flight path (taxi): hidden from the moment the game reports it until it stops reporting it.
+db.hideOnTaxi = true
+frame:UpdateAutoHide()
+assert(aux.registered.PLAYER_CONTROL_LOST and aux.registered.PLAYER_CONTROL_GAINED)
+assert(aux.registered.UNIT_FLAGS == "player", "unit flags are only watched for the player")
+assert(frame.shown, "not on a flight path")
+fire("PLAYER_CONTROL_LOST")
+assert(frame.shown and aux.shown, "the flag is still false at takeoff: keep looking")
+onTaxi = true
+fire("UNIT_FLAGS")
+assert(not frame.shown, "the unit flags update reports the taxi flag at once")
+inCombat = true
+fire("PLAYER_REGEN_DISABLED")
+assert(not frame.shown, "a flight path hides the bar even in combat")
+inCombat = false
+fire("PLAYER_REGEN_ENABLED")
+fire("PLAYER_CONTROL_GAINED")
+assert(not frame.shown, "the flag may lag behind regaining control")
+onTaxi = false
+tick(0.5)
+assert(frame.shown, "the poll shows the bar once the game stops reporting the flight")
+tick(2)
+assert(not aux.shown, "polling stops once nothing is pending")
+
+-- A missed unit-flags update is still caught by the poll that follows losing control.
+fire("PLAYER_CONTROL_LOST")
+onTaxi = true
+tick(0.5)
+assert(not frame.shown, "the poll catches a takeoff whose flag update was missed")
+onTaxi = false
+fire("UNIT_FLAGS")
+assert(frame.shown, "the unit flags update shows the bar when the flag clears")
+tick(2)
+assert(not aux.shown)
+
+onTaxi = true
+frame:UpdateAutoHide()
+assert(not frame.shown, "logging in on a flight path hides the bar")
+frame.unlock = true
+frame:UpdateAutoHide()
+assert(frame.shown, "an unlocked bar is always shown")
+frame.unlock = nil
+frame:UpdateAutoHide()
+assert(not frame.shown, "locking it again applies the option")
+
+-- The auto-hide reason is combined with the legacy timeline setting, not overriding it.
+db.legacyTimeline = false
+onTaxi = false
+frame:UpdateAutoHide()
+assert(not frame.shown, "ending the flight does not show a bar that is turned off")
+db.legacyTimeline = true
+frame:UpdateTimelineFrameVisibility()
+assert(frame.shown)
+
+db.hideOnTaxi = false
+onTaxi = true
+frame:UpdateAutoHide()
+assert(frame.shown and not next(aux.registered) and not aux.shown, "turning the options off restores the bar")
+onTaxi = false
+
+-- Mounted: hidden, except while in combat.
+db.hideMounted = true
+frame:UpdateAutoHide()
+mounted = true
+fire("PLAYER_MOUNT_DISPLAY_CHANGED")
+assert(not frame.shown)
+inCombat = true
+fire("PLAYER_REGEN_DISABLED")
+assert(frame.shown, "the mounted mode never hides the bar in combat")
+inCombat = false
+fire("PLAYER_REGEN_ENABLED")
+assert(not frame.shown)
+mounted = false
+fire("PLAYER_MOUNT_DISPLAY_CHANGED")
+assert(frame.shown)
+
+-- Flying has no event, so it is polled; dynamic flight counts too; clients without the gliding API still work.
+db.hideMounted = false
+db.hideFlying = true
+frame:UpdateAutoHide()
+assert(aux.shown, "flying is polled")
+flying = true
+tick(0.5)
+assert(not frame.shown)
+flying, gliding = false, true
+tick(0.5)
+assert(not frame.shown, "dynamic flight counts as flying")
+gliding = false
+tick(0.5)
+assert(frame.shown)
+C_PlayerInfo = nil
+flying = true
+tick(0.5)
+assert(not frame.shown, "no gliding API is fine")
+flying = "secret"
+tick(0.5)
+assert(frame.shown, "a secret value is never tested")
+flying = false
+
+-- Classic Era has no flying: the mode is unavailable and registers nothing.
+WOW_PROJECT_CLASSIC, WOW_PROJECT_ID = 2, 2
+assert(frame:IsAutoHideAvailable("hideMounted") and frame:IsAutoHideAvailable("hideOnTaxi"))
+assert(not frame:IsAutoHideAvailable("hideFlying"))
+frame:UpdateAutoHide()
+assert(frame.shown and not next(aux.registered) and not aux.shown)
+WOW_PROJECT_CLASSIC, WOW_PROJECT_ID = nil, nil
+print("Auto-hide tests passed")
