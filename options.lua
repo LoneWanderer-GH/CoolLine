@@ -84,6 +84,9 @@ local function refresh(rescanSources)
     if CoolLine.updatelook then
         CoolLine.updatelook()
     end
+    if CoolLine.UpdateAutoHide then
+        CoolLine:UpdateAutoHide()
+    end
     if CoolLine.SPELL_UPDATE_COOLDOWN then
         CoolLine:SPELL_UPDATE_COOLDOWN()
     end
@@ -130,6 +133,11 @@ local function legacyTimelineSet(_, value)
     CoolLine.db.legacyTimeline = value
     CoolLine:UpdateTimelineFrameVisibility()
     refresh()
+end
+
+-- Auto-hide modes the running client cannot report (for example flying in Classic Era) are not offered.
+local function autoHideUnavailable(info)
+    return CoolLine.IsAutoHideAvailable ~= nil and not CoolLine:IsAutoHideAvailable(info[#info])
 end
 
 local function colorGet(info)
@@ -260,6 +268,9 @@ function CoolLine:SetUnlocked(unlocked)
             self.resizer:Hide()
         end
         self.updatelook()
+    end
+    if self.UpdateAutoHide then
+        self:UpdateAutoHide()
     end
     if self.SyncElvUIMover then
         self:SyncElvUIMover()
@@ -663,10 +674,54 @@ function CoolLine:SetupOptions()
                     },
                 },
             },
+            autohide = {
+                type = "group",
+                name = "Auto-hide",
+                order = 5,
+                args = {
+                    description = {
+                        type = "description",
+                        name = "Hide the bar while you travel. It comes back when the travel ends, and it is always "
+                            .. "shown while it is unlocked.",
+                        order = 0,
+                    },
+                    hideOnTaxi = {
+                        type = "toggle",
+                        name = "Hide on flight paths (taxi)",
+                        desc = "Hide the bar while a flight path carries you.",
+                        width = "full",
+                        get = optionGet,
+                        set = optionSet,
+                        hidden = autoHideUnavailable,
+                        order = 1,
+                    },
+                    hideMounted = {
+                        type = "toggle",
+                        name = "Hide while mounted",
+                        desc = "Hide the bar while you are mounted. It stays visible in combat.",
+                        width = "full",
+                        get = optionGet,
+                        set = optionSet,
+                        hidden = autoHideUnavailable,
+                        order = 2,
+                    },
+                    hideFlying = {
+                        type = "toggle",
+                        name = "Hide while flying",
+                        desc = "Hide the bar while you fly, on a flying mount, in a druid flight form or with dynamic "
+                            .. "flight. It stays visible in combat so the cooldowns are there when you land to fight.",
+                        width = "full",
+                        get = optionGet,
+                        set = optionSet,
+                        hidden = autoHideUnavailable,
+                        order = 3,
+                    },
+                },
+            },
             expert = {
                 type = "group",
                 name = "Expert",
-                order = 5,
+                order = 6,
                 args = expertArgs,
             },
         },

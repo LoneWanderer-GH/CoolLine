@@ -91,7 +91,7 @@ CoolLine.DEFAULT_RETAIL_MAX_DURATION_S = DEFAULT_RETAIL_MAX_DURATION_S
 -- cooldowns whose timing the game hides (restricted values), where the bar has to estimate.
 local EXPERT_SETTINGS = {
     hold = {
-        default = 1, min = 0, max = 3, step = 0.1, name = "Estimate hold point (s)",
+        default = 0.5, min = 0, max = 3, step = 0.05, name = "Estimate hold point (s)",
         desc = "An estimated cooldown stops at this remaining time while the game still reports it as active. "
             .. "Lower values let the icon get closer to the end of the bar before it waits.",
     },
@@ -111,9 +111,9 @@ local EXPERT_SETTINGS = {
             .. "its base cooldown is unknown. Base cooldowns ignore talents and haste.",
     },
     recheck = {
-        default = 0.5, min = 0.1, max = 2, step = 0.1, name = "Recheck interval (s)",
-        desc = "How often an exhausted estimate asks the game again whether the cooldown is over. Lower values "
-            .. "remove icons sooner but scan the spellbook more often.",
+        default = 0.25, min = 0.1, max = 2, step = 0.05, name = "Recheck interval (s)",
+        desc = "How often a waiting icon asks the game whether the cooldown is over. Lower values "
+            .. "remove icons sooner but scan the spellbook more often (scans are also throttled to about 0.3 s).",
     },
 }
 CoolLine.EXPERT_SETTINGS = EXPERT_SETTINGS
@@ -425,6 +425,9 @@ function CoolLine:PLAYER_LOGIN()
     if db.showConfigPreviews and CoolLine.SetConfigPreviews then
         CoolLine:SetConfigPreviews(true)
     end
+    if self.UpdateAutoHide then
+        self:UpdateAutoHide()
+    end
     self:UpdateTimelineFrameVisibility()
     self:RegisterEvent("PLAYER_LEAVING_WORLD")
 end
@@ -454,7 +457,7 @@ function CoolLine:ADDON_RESTRICTION_STATE_CHANGED(_, state)
 end
 
 function CoolLine:UpdateTimelineFrameVisibility()
-    if db.legacyTimeline ~= false and not self.inPetBattle then
+    if db.legacyTimeline ~= false and not self.inPetBattle and not self.autoHidden then
         self:Show()
     else
         self:Hide()
@@ -761,7 +764,13 @@ local function NewCooldownClassic(name, icon, endtime, isplayer, spellID, source
                 -- The estimated position and the game's exact countdown would disagree.
                 frame.secretCooldown:SetHideCountdownNumbers(true)
                 frame.secretCooldown:SetScript("OnCooldownDone", function()
-                    if CoolLine.RequestCooldownRecheck then
+                    -- The game's own countdown just ended: ask it right away instead of waiting for the throttle,
+                    -- but never faster than every 0.2 s in case the game keeps reporting the cooldown as active.
+                    local ctime = GetTime()
+                    if CoolLine.ScanCooldownsNow and ctime - (CoolLine.lastDoneScan or 0) >= 0.2 then
+                        CoolLine.lastDoneScan = ctime
+                        CoolLine:ScanCooldownsNow()
+                    elseif CoolLine.RequestCooldownRecheck then
                         CoolLine:RequestCooldownRecheck()
                     end
                 end)

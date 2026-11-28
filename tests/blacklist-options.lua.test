@@ -95,6 +95,18 @@ spells[6] = { "Sort sans icône immédiate" }
 coolline.db.block["6"] = true
 assert(entries.values()["6"] == "|T106:16:16|t Sort sans icône immédiate (Spell) [6]")
 
+-- Auto-hide options: re-evaluate the bar when changed, and only offered when the client can report the state.
+local autoHideUpdates = 0
+function coolline:UpdateAutoHide() autoHideUpdates = autoHideUpdates + 1 end
+local autoHide = coolline.OptionsTable.args.autohide.args
+assert(autoHide.hideOnTaxi and autoHide.hideMounted and autoHide.hideFlying)
+assert(not autoHide.hideFlying.hidden({ "hideFlying" }), "without the module every option is offered")
+function coolline:IsAutoHideAvailable(key) return key ~= "hideFlying" end
+assert(autoHide.hideFlying.hidden({ "hideFlying" }) and not autoHide.hideOnTaxi.hidden({ "hideOnTaxi" }))
+autoHide.hideOnTaxi.set({ "hideOnTaxi" }, true)
+assert(coolline.db.hideOnTaxi == true and autoHideUpdates == 1, "changing an auto-hide option re-evaluates the bar")
+coolline.IsAutoHideAvailable, coolline.UpdateAutoHide = nil, nil
+
 C_Item, C_Spell = nil, nil
 GetItemIcon = function(id) return items[id] and items[id][2] end
 events = {}

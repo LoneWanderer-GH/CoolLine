@@ -52,8 +52,10 @@ as follows:
 - If a cast of the same spell is seen well after the icon started, the cooldown
   is considered restarted and the estimate restarts from that cast.
 - If the game still reports the cooldown as active after the estimated end, the
-  estimate is extended and rechecked every half second, and when the native
-  cooldown completes, so icons do not remain stuck at one second. An icon the
+  icon waits at a hold point (0.5 second before the end of the bar by default;
+  several waiting icons are fanned out so none hides another) and the game is
+  asked again every 0.25 second, and as soon as the native cooldown completes. The
+  estimate is no longer pushed back, so the icon does not bounce. An icon the
   game stops reporting at all (for example after a respec) is dropped shortly
   after its estimated end (and in any case 20 seconds after it, even if no scan
   runs), and icons of spells that left the spellbook are removed when it
@@ -70,6 +72,20 @@ as follows:
   not submitted to Blizzard's encounter timeline. Item and pet action cooldowns
   with secret timing cannot currently be updated this way.
 
+The **Expert** section of the options exposes the thresholds used for these
+estimates (all of them only matter while the game hides cooldown timing):
+
+| Setting | Default | Range | Effect |
+| --- | --- | --- | --- |
+| Estimate hold point | 0.5 s | 0-3 s | Remaining time at which an exhausted estimate waits for the game |
+| Confirmation delay | 2.5 s | 0.5-5 s | How long a new restricted cooldown must stay active before it is shown; below about 1.5 s, global-cooldown blips can appear |
+| Drop unconfirmed icons after | 5 s | 1-15 s | Removal delay once the game no longer reports the cooldown |
+| Fallback duration | 30 s | 5-300 s | Duration assumed when neither an observation nor the base cooldown is known |
+| Recheck interval | 0.25 s | 0.1-2 s | How often a waiting icon asks the game whether the cooldown is over (scans are also throttled to about 0.3 s) |
+
+Cooldowns of 1.5 seconds or less (the global cooldown) are never displayed and
+that limit is not configurable.
+
 On Retail, cooldowns whose remaining time is secret are handled like on
 Forever (exact timing read earlier is kept, new ones are confirmed and
 estimated, shown with a `?`), using the same rules as above. While timing is
@@ -85,6 +101,24 @@ Enable **Show example cooldowns** in the Behavior section of CoolLine's
 options to display four temporary cooldowns with different durations. They
 remain visible until the option is disabled and are never routed to Blizzard's
 encounter timeline.
+
+The **Auto-hide** section of the options hides the bar while you travel (all
+off by default; it is always shown while unlocked):
+
+- **Hide on flight paths (taxi):** from losing control to a flight path until
+  the game stops reporting it (`UnitOnTaxi`), even in combat.
+- **Hide while mounted:** `IsMounted`. Mounted druid forms are not mounts.
+- **Hide while flying:** `IsFlying` (flying mounts and druid flight forms in
+  the air) and, where the client has it, dynamic flight (`C_PlayerInfo`
+  gliding). Not offered in Classic Era, which has no flying.
+
+The mounted and flying modes never hide the bar in combat, so the cooldowns are
+there when you have to land and fight. The game has no flight-path or flying
+event: CoolLine reacts to losing/regaining control, unit-flag, mount, form and
+glide events, and polls twice a second only while flying hiding is enabled,
+while the bar is hidden, or briefly after a control change. This only affects
+CoolLine's own bar: no other UI addon checked (ElvUI and its plugins, Tukui,
+EllesmereUI, DaylightUI) publishes a taxi event to subscribe to.
 
 ![](./docs/img/BlizzardTimeLineIntegration.png)
 

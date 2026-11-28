@@ -26,4 +26,13 @@ for name, count in pairs(closed) do
 end
 assert(next(opened), "the TOC is expected to declare per-flavor blocks")
 
+-- Every addon file listed at the top level of the TOC must exist (a typo would silently drop a module).
+for line in text:gmatch("[^\r\n]+") do
+    if line:match("^[%w_%-]+%.lua$") or line:match("^[%w_%-]+%.xml$") then
+        local listed = io.open(line, "r")
+        assert(listed, "the TOC lists a file that does not exist: " .. line)
+        listed:close()
+    end
+end
+
 print("TOC tests passed")

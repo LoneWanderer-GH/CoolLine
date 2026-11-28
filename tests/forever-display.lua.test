@@ -65,8 +65,9 @@ frame:ADDON_LOADED("CoolLine")
 frame:PLAYER_LOGIN()
 
 local durationObject = {}
-local rechecks = 0
+local rechecks, scans = 0, 0
 frame.RequestCooldownRecheck = function() rechecks = rechecks + 1 end
+frame.ScanCooldownsNow = function() scans = scans + 1 end
 frame.NewCooldownClassic("Blink", 123, 110, true, 123, "player", true, durationObject)
 local icon = frame.cooldowns[1]
 assert(icon and icon.estimated and icon.secretCooldown.durationObject == durationObject)
@@ -80,7 +81,9 @@ now = 115.1
 frame.scripts.OnUpdate(frame, 2)
 assert(rechecks == 1, "rescan requests are rate limited")
 icon.secretCooldown.scripts.OnCooldownDone()
-assert(rechecks == 2, "native completion requests a rescan")
+assert(scans == 1 and rechecks == 1, "native completion scans immediately")
+icon.secretCooldown.scripts.OnCooldownDone()
+assert(scans == 1 and rechecks == 2, "repeated completions fall back to the throttled rescan")
 now = 140
 frame.scripts.OnUpdate(frame, 2)
 assert(#frame.cooldowns == 0, "an estimate the game stopped confirming is dropped after a while")
@@ -119,4 +122,38 @@ frame.NewCooldownClassic("Broken", 321, 400, true, 321, "player")
 frame.cooldowns[1].endtime = nil
 now = 153
 assert(pcall(frame.scripts.OnUpdate, frame, 2) and #frame.cooldowns == 0, "timing-less frame is dropped safely")
+
+-- Expert settings fall back to the default when invalid and are clamped to their range.
+local db = CoolLineDB
+assert(frame:GetExpert("hold") == 0.5 and frame:GetExpert("confirm") == 2.5, "defaults apply without saved values")
+assert(frame:GetExpert("recheck") == 0.25)
+db.expert = { hold = 99, confirm = "x", orphan = 0 / 0, fallback = -5, recheck = 0.3 }
+assert(frame:GetExpert("hold") == 3, "values above the range are clamped")
+assert(frame:GetExpert("confirm") == 2.5 and frame:GetExpert("orphan") == 5, "invalid values use the default")
+assert(frame:GetExpert("fallback") == 5 and frame:GetExpert("recheck") == 0.3, "low values clamp, valid ones are kept")
+assert(frame:GetExpert("unknown") == nil)
+db.expert = nil
+
+-- An exhausted estimate that the game still reports waits at the hold point; several of them are fanned out,
+-- keep their normal size and stay opaque, and the first scan that stops reporting them removes the icons.
+now = 200
+frame.NewCooldownClassic("First", 1, 199, true, 1, "player", true, durationObject)
+frame.NewCooldownClassic("Second", 2, 199.5, true, 2, "player", true, durationObject)
+local first, second = frame.cooldowns[1], frame.cooldowns[2]
+frame.scripts.OnUpdate(frame, 2)
+assert(first.pinned and second.pinned, "estimates past their end wait at the hold point")
+assert(first.pinOffset ~= second.pinOffset, "waiting icons do not overlap")
+assert(first.alpha == 1 and second.alpha == 1, "waiting icons stay opaque")
+now = 210
+frame.scripts.OnUpdate(frame, 2)
+assert(first.pinned and #frame.cooldowns == 2, "a pinned icon is not dropped while the game may still confirm it")
+frame.ClearCooldown(nil, "First", "player")
+assert(not first.pinned and first.pinOffset == nil, "clearing a pinned icon resets its waiting state")
+db.expert = { hold = 0 }
+frame.scripts.OnUpdate(frame, 2)
+assert(not second.pinned or second.pinOffset == 0, "a zero hold point never fans out icons")
+db.expert = nil
+now = 230
+frame.scripts.OnUpdate(frame, 2)
+assert(#frame.cooldowns == 0, "a waiting icon nobody confirms is eventually swept")
 print("Forever display tests passed")

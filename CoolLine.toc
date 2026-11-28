@@ -71,3 +71,4 @@ core.lua
 elvui.lua
 spellbook.lua
 commands.lua
+autohide.lua
